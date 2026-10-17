@@ -94,27 +94,36 @@ namespace VoidUI
 
         private void OnTrackTick(object sender, EventArgs e)
         {
-            if (_rustHwnd == IntPtr.Zero || !NativeMethods.IsWindow(_rustHwnd))
-                _rustHwnd = NativeMethods.FindWindow("UnityWndClass", null);
 
-            if (_rustHwnd != IntPtr.Zero && NativeMethods.IsWindowVisible(_rustHwnd))
+
+            try
             {
-                NativeMethods.GetWindowRect(_rustHwnd, out var rect);
-                // GetWindowRect возвращает физические пиксели, а Left/Top/Width/Height — DIP.
-                double scale = 1.0;
-                try { scale = System.Windows.Media.VisualTreeHelper.GetDpi(this).PixelsPerDip; } catch { }
-                if (scale <= 0) scale = 1.0;
-                Left = rect.Left / scale;
-                Top = rect.Top / scale;
-                Width = (rect.Right - rect.Left) / scale;
-                Height = (rect.Bottom - rect.Top) / scale;
+                if (_rustHwnd == IntPtr.Zero || !NativeMethods.IsWindow(_rustHwnd))
+                    _rustHwnd = NativeMethods.FindWindow("UnityWndClass", null);
+
+                if (_rustHwnd != IntPtr.Zero && NativeMethods.IsWindowVisible(_rustHwnd))
+                {
+                    NativeMethods.GetWindowRect(_rustHwnd, out var rect);
+
+                    double scale = 1.0;
+                    try { scale = System.Windows.Media.VisualTreeHelper.GetDpi(this).PixelsPerDip; } catch { }
+                    if (scale <= 0) scale = 1.0;
+                    Left = rect.Left / scale;
+                    Top = rect.Top / scale;
+                    Width = (rect.Right - rect.Left) / scale;
+                    Height = (rect.Bottom - rect.Top) / scale;
+                }
+                else
+                {
+                    Left = 0;
+                    Top = 0;
+                    Width = SystemParameters.PrimaryScreenWidth;
+                    Height = SystemParameters.PrimaryScreenHeight;
+                }
             }
-            else
+            catch (Exception ex)
             {
-                Left = 0;
-                Top = 0;
-                Width = SystemParameters.PrimaryScreenWidth;
-                Height = SystemParameters.PrimaryScreenHeight;
+                Log($"OnTrackTick failed: {ex.Message}");
             }
         }
 

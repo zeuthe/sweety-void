@@ -203,6 +203,21 @@
                     <TextBlock Name="SpaceText" Classes="sub" Margin="0,4,0,0"/>
                 </StackPanel>
 
+                
+                <StackPanel Name="PageFeatures" Spacing="14" IsVisible="False">
+                    <TextBlock Text="Choose components" Classes="h1"/>
+                    <TextBlock Classes="sub"
+                               Text="Unticked pages are not installed: the app hides them and their code never runs."/>
+                    <StackPanel Spacing="9">
+                        <TextBlock Text="PAGES" Classes="lbl"/>
+                        <CheckBox Name="TrackerCheck" Content="Tracker — server list, deaths and combat log" IsChecked="True"/>
+                        <CheckBox Name="GraphicsCheck" Content="Graphics — sensitivity and graphics settings" IsChecked="True"/>
+                        <CheckBox Name="BindsCheck" Content="Binds — key bindings" IsChecked="True"/>
+                    </StackPanel>
+                    <TextBlock Classes="sub"
+                               Text="Home and Crosshair are always installed. You can change this later by running the setup again."/>
+                </StackPanel>
+
                 <!-- Progress -->
                 <StackPanel Name="PageProgress" Spacing="18" IsVisible="False" VerticalAlignment="Center">
                     <TextBlock Name="ProgressTitle" Text="Installing..." Classes="h1"/>

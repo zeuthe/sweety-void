@@ -13,7 +13,7 @@ namespace VoidUI.Installer;
 
 public partial class InstallerWindow : Window
 {
-    private enum Step { Welcome, License, Path, Progress, Finish }
+    private enum Step { Welcome, License, Path, Features, Progress, Finish }
 
     private const string LicenseBody =
         "MIT License\n\n" +
@@ -93,6 +93,7 @@ public partial class InstallerWindow : Window
         SetVisible("PageWelcome", step == Step.Welcome);
         SetVisible("PageLicense", step == Step.License);
         SetVisible("PagePath", step == Step.Path);
+        SetVisible("PageFeatures", step == Step.Features);
         SetVisible("PageProgress", step == Step.Progress);
         SetVisible("PageFinish", step == Step.Finish);
         UpdateButtons();
@@ -110,7 +111,7 @@ public partial class InstallerWindow : Window
         var cancel = this.FindControl<Button>("CancelBtn")!;
 
         // The uninstaller is a single progress screen - no navigation at all.
-        back.IsVisible = !_busy && !_uninstallRunning && _step is Step.License or Step.Path;
+        back.IsVisible = !_busy && !_uninstallRunning && _step is Step.License or Step.Path or Step.Features;
         cancel.IsVisible = !_busy && !_uninstallRunning && _step != Step.Finish;
 
         next.IsVisible = !_busy && !_uninstallRunning;
@@ -119,7 +120,8 @@ public partial class InstallerWindow : Window
         {
             Step.Welcome => "Next",
             Step.License => "Next",
-            Step.Path => "Install",
+            Step.Path => "Next",
+            Step.Features => "Install",
             Step.Finish => "Finish",
             _ => "Next"
         };
@@ -143,6 +145,9 @@ public partial class InstallerWindow : Window
                 ShowStep(Step.Path);
                 break;
             case Step.Path:
+                ShowStep(Step.Features);
+                break;
+            case Step.Features:
                 await RunInstallAsync();
                 break;
             case Step.Finish:
@@ -155,6 +160,7 @@ public partial class InstallerWindow : Window
     {
         if (_step == Step.License) ShowStep(Step.Welcome);
         else if (_step == Step.Path) ShowStep(Step.License);
+        else if (_step == Step.Features) ShowStep(Step.Path);
     }
 
     private async Task BrowseAsync()
@@ -191,7 +197,11 @@ public partial class InstallerWindow : Window
             _target,
             this.FindControl<CheckBox>("DesktopCheck")!.IsChecked == true,
             this.FindControl<CheckBox>("StartMenuCheck")!.IsChecked == true,
-            this.FindControl<CheckBox>("PinTaskbarCheck")!.IsChecked == true);
+            this.FindControl<CheckBox>("PinTaskbarCheck")!.IsChecked == true,
+
+            this.FindControl<CheckBox>("TrackerCheck")!.IsChecked != false,
+            this.FindControl<CheckBox>("GraphicsCheck")!.IsChecked != false,
+            this.FindControl<CheckBox>("BindsCheck")!.IsChecked != false);
 
         _busy = true;
         Set("ProgressTitle", "Installing...");

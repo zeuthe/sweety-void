@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -36,7 +37,13 @@ internal sealed record InstallOptions(
     string TargetDir,
     bool DesktopShortcut,
     bool StartMenuShortcut,
-    bool PinTaskbar);
+    bool PinTaskbar,
+
+
+
+    bool Tracker = true,
+    bool Graphics = true,
+    bool Binds = true);
 
 internal sealed record ProgressInfo(int Percent, string Detail);
 
@@ -51,6 +58,10 @@ internal static class InstallService
 
         await ExtractPayloadAsync(target, progress, ct);
 
+
+        progress.Report(new ProgressInfo(91, "Writing the feature list..."));
+        WriteFeatures(target, options);
+
         progress.Report(new ProgressInfo(92, "Creating shortcuts..."));
         CreateShortcuts(target, options);
         if (options.PinTaskbar)
@@ -63,7 +74,66 @@ internal static class InstallService
         CreateUninstaller(target);
         WriteUninstallRegistry(target);
 
+
+        WriteInstallLog(target, options);
+
         progress.Report(new ProgressInfo(100, "Done"));
+    }
+
+
+    private static void WriteFeatures(string target, InstallOptions options)
+    {
+        try
+        {
+            var json = "{\n" +
+                       $"  \"Tracker\": {(options.Tracker ? "true" : "false")},\n" +
+                       $"  \"Graphics\": {(options.Graphics ? "true" : "false")},\n" +
+                       $"  \"Binds\": {(options.Binds ? "true" : "false")}\n" +
+                       "}\n";
+            File.WriteAllText(Path.Combine(target, "features.json"), json);
+        }
+        catch {  }
+    }
+
+
+    private static void WriteInstallLog(string target, InstallOptions options)
+    {
+        try
+        {
+            var files = Directory.GetFiles(target, "*", SearchOption.AllDirectories).Length;
+            var sizeMb = Math.Round(DirSize(target) / 1024d / 1024d, 1);
+
+            var features = new[]
+            {
+                options.Tracker ? "tracker" : null,
+                options.Graphics ? "graphics" : null,
+                options.Binds ? "binds" : null
+            }.Where(f => f != null).ToArray();
+            if (features.Length == 0) features = new[] { "home+crosshair" };
+
+            var shortcuts = new[]
+            {
+                options.DesktopShortcut ? "desktop" : null,
+                options.StartMenuShortcut ? "start-menu" : null,
+                options.PinTaskbar ? "taskbar" : null
+            }.Where(s => s != null).ToArray();
+
+            var line =
+                $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} | install | {Product.Name} {Product.Version} | " +
+                $"dir=\"{target}\" | pages={string.Join(",", features)} | " +
+                $"shortcuts={(shortcuts.Length == 0 ? "none" : string.Join(",", shortcuts))} | " +
+                $"files={files} | size={sizeMb} MB";
+
+            AppendLog(target, line);
+        }
+        catch {  }
+    }
+
+    private static void AppendLog(string target, string line)
+    {
+        var log = Path.Combine(target, "log.txt");
+        var text = File.Exists(log) ? File.ReadAllText(log) + Environment.NewLine : "";
+        File.WriteAllText(log, text + line + Environment.NewLine);
     }
 
     private static async Task ExtractPayloadAsync(string target, IProgress<ProgressInfo> progress, CancellationToken ct)
@@ -237,6 +307,10 @@ internal static class InstallService
     {
         progress.Report(new ProgressInfo(5, "Closing the application..."));
         await Task.Run(() => KillApp(), ct);
+
+
+        AppendLog(target, $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} | uninstall | {Product.Name} {Product.Version} | " +
+                          $"remove-data={removeData.ToString().ToLowerInvariant()}");
 
         progress.Report(new ProgressInfo(25, "Removing shortcuts..."));
         TryDelete(Product.DesktopShortcut);

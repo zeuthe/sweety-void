@@ -19,6 +19,24 @@
                 </StackPanel>
             </Border>
 
+            <!-- Style -->
+            <Border Classes="section">
+                <StackPanel Spacing="12">
+                    <TextBlock Text="STYLE" Classes="section-header"/>
+
+                    <TextBlock Text="Font" Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,0,0,4"/>
+                    <ComboBox Name="FontStyleCombo" MinWidth="240" HorizontalAlignment="Left" FontSize="12"/>
+                    <TextBlock Name="FontStylePreview" Text="Sweety Void 0123456789 — abcdef" FontSize="14"
+                               Margin="0,4,0,0" Foreground="{StaticResource TextPrimary}"/>
+
+                    <TextBlock Text="Buttons" Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,4,0,0"/>
+                    <WrapPanel Name="ButtonStyleWrap" Orientation="Horizontal" Margin="-6,0,0,0"/>
+
+                    <TextBlock Text="Applied on top of the active theme and kept across restarts."
+                               FontSize="11" Foreground="{StaticResource TextTertiary}"/>
+                </StackPanel>
+            </Border>
+
             <!-- Data -->
             <Border Classes="section">
                 <StackPanel Spacing="12">
@@ -28,6 +46,47 @@
                         <Button Classes="ghost" Name="OpenFolderBtn" Content="Open Folder"/>
                         <Button Classes="ghost" Name="ExportBtn" Content="Export Config"/>
                     </StackPanel>
+                    <TextBlock Name="ExportHint" Text="" FontSize="11"
+                               Foreground="{StaticResource TextTertiary}"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Updates -->
+            <Border Classes="section">
+                <StackPanel Spacing="12">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="UPDATES" Classes="section-header"/>
+                        <Border Classes="new-badge"><TextBlock Text="NEW"/></Border>
+                    </StackPanel>
+
+                    <Grid ColumnDefinitions="*,Auto">
+                        <StackPanel Spacing="3" VerticalAlignment="Center" Margin="0,0,12,0">
+                            <TextBlock Name="UpdateStateText" Text="Checking for updates..."
+                                       FontSize="13" FontWeight="600"
+                                       Foreground="{StaticResource TextPrimary}"/>
+                            <TextBlock Name="UpdateNotesText" Text=""
+                                       FontSize="11" Foreground="{StaticResource TextTertiary}"
+                                       TextWrapping="Wrap" MaxWidth="560" MaxHeight="34"
+                                       TextTrimming="CharacterEllipsis"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8"
+                                    VerticalAlignment="Center">
+                            <Button Classes="ghost" Name="UpdateCheckBtn" Content="Check now"/>
+                            <Button Classes="action" Name="UpdateActionBtn" Content="Download"
+                                    IsVisible="False"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <TextBlock Text="Update mode" Foreground="{StaticResource TextSecondary}"
+                               FontSize="12" Margin="0,4,0,0"/>
+                    <ComboBox Name="UpdateModeCombo" MinWidth="240" HorizontalAlignment="Left"
+                              FontSize="12"/>
+
+                    <TextBlock Name="UpdateModeHint"
+                               Text="Ask before download — the update is never downloaded until you confirm. Automatic — downloaded and installed on its own."
+                               FontSize="11" Foreground="{StaticResource TextTertiary}"
+                               TextWrapping="Wrap" MaxWidth="620"/>
                 </StackPanel>
             </Border>
 
@@ -38,11 +97,11 @@
                     <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,4,0,0">
                         <TextBlock Text="Sweety Void" FontSize="16" FontWeight="700" Foreground="{StaticResource TextPrimary}"/>
                         <Border Background="{StaticResource AccentSubtle}" CornerRadius="6" Padding="8,2">
-                            <TextBlock Text="v1.0.0" FontSize="10" FontWeight="600" Foreground="{StaticResource AccentDefault}"/>
+                            <TextBlock Name="VersionText" Text="v1.0.0" FontSize="10" FontWeight="600" Foreground="{StaticResource AccentDefault}"/>
                         </Border>
                     </StackPanel>
                     <TextBlock Text=".NET 8 + Avalonia UI" Foreground="{StaticResource TextTertiary}" FontSize="11"/>
-                    <TextBlock Text="A comprehensive Rust configuration tool with graphics presets, crosshair overlay, keybind management, and combat analytics."
+                    <TextBlock Text="A comprehensive Rust configuration tool with graphics presets, crosshair overlay, keybind management, and tracker analytics."
                                Foreground="{StaticResource TextTertiary}" FontSize="11" TextWrapping="Wrap"/>
                 </StackPanel>
             </Border>

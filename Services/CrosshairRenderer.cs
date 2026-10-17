@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
@@ -14,6 +14,7 @@ namespace VoidUI.Services
     {
         private readonly Canvas _canvas;
         private FrameworkElement _currentElement;
+        private FrameworkElement _glowElement;
         private Storyboard _animStoryboard;
         private Storyboard _motionStoryboard;
         private readonly List<SolidColorBrush> _rainbowBrushes = new();
@@ -23,7 +24,64 @@ namespace VoidUI.Services
             _canvas = canvas;
         }
 
+        private FrameworkElement CreatePreset(CrosshairState state)
+        {
+            return state.Preset switch
+            {
+                "dot" => CreateDot(state),
+                "cross" => CreateCross(state),
+                "circle" => CreateCircle(state),
+                "bracket" => CreateBracket(state),
+
+                "symbol" => CreateSymbol(state),
+                "custom" => CreateSymbol(state),
+                _ => CreateDot(state)
+            };
+        }
+
+
+        private void Place(FrameworkElement element, double cx, double cy)
+        {
+            if (element is Canvas cvs)
+            {
+                Canvas.SetLeft(element, Snap(cx - cvs.Width / 2.0));
+                Canvas.SetTop(element, Snap(cy - cvs.Height / 2.0));
+            }
+            else if (element is Ellipse el)
+            {
+                Canvas.SetLeft(element, Snap(cx - el.Width / 2.0));
+                Canvas.SetTop(element, Snap(cy - el.Height / 2.0));
+            }
+            else if (element is TextBlock tb)
+            {
+                tb.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                var tbw = tb.DesiredSize.Width;
+                var tbh = tb.DesiredSize.Height;
+                Canvas.SetLeft(element, Snap(cx - tbw / 2.0));
+                Canvas.SetTop(element, Snap(cy - tbh / 2.0));
+            }
+            else
+            {
+                Canvas.SetLeft(element, Snap(cx));
+                Canvas.SetTop(element, Snap(cy));
+            }
+        }
+
         public void Render(CrosshairState state)
+        {
+            try
+            {
+                RenderCore(state);
+            }
+            catch (Exception ex)
+            {
+
+
+                CrashLog.Write("Overlay.Render", ex);
+            }
+        }
+
+        private void RenderCore(CrosshairState state)
         {
             _canvas.Children.Clear();
             _animStoryboard?.Stop();
@@ -39,48 +97,28 @@ namespace VoidUI.Services
             double cx = canvasW / 2.0 + state.PosX;
             double cy = canvasH / 2.0 + state.PosY;
 
-            _currentElement = state.Preset switch
-            {
-                "dot" => CreateDot(state),
-                "cross" => CreateCross(state),
-                "circle" => CreateCircle(state),
-                "bracket" => CreateBracket(state),
-
-                "symbol" => CreateSymbol(state),
-                "custom" => CreateSymbol(state),
-                _ => CreateDot(state)
-            };
-
+            _currentElement = CreatePreset(state);
             if (_currentElement == null) return;
 
-            if (_currentElement is Canvas cvs)
+
+
+
+            _glowElement = null;
+            if (state.Animation == "glow")
             {
-                Canvas.SetLeft(_currentElement, Snap(cx - cvs.Width / 2.0));
-                Canvas.SetTop(_currentElement, Snap(cy - cvs.Height / 2.0));
-            }
-            else if (_currentElement is Ellipse el)
-            {
-                Canvas.SetLeft(_currentElement, Snap(cx - el.Width / 2.0));
-                Canvas.SetTop(_currentElement, Snap(cy - el.Height / 2.0));
-            }
-            else if (_currentElement is TextBlock tb)
-            {
-                tb.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-                var tbw = tb.DesiredSize.Width;
-                var tbh = tb.DesiredSize.Height;
-                Canvas.SetLeft(_currentElement, Snap(cx - tbw / 2.0));
-                Canvas.SetTop(_currentElement, Snap(cy - tbh / 2.0));
-            }
-            else
-            {
-                Canvas.SetLeft(_currentElement, Snap(cx));
-                Canvas.SetTop(_currentElement, Snap(cy));
+                _glowElement = CreateGlowHalo(state);
+                if (_glowElement != null)
+                {
+                    Place(_glowElement, cx, cy);
+                    _canvas.Children.Add(_glowElement);
+                }
             }
 
+            Place(_currentElement, cx, cy);
             _canvas.Children.Add(_currentElement);
 
-            // Применяем поворот только при ненулевом угле: нулевой RotateTransform
-            // всё равно включает трансформ-пайплайн и ломает попиксельный снаппинг.
+
+
             if (Math.Abs(state.Rotation) > 0.01)
             {
                 var transformGroup = new TransformGroup();
@@ -99,14 +137,18 @@ namespace VoidUI.Services
         {
             _animStoryboard?.Stop();
             _motionStoryboard?.Stop();
+            _animStoryboard = null;
+            _motionStoryboard = null;
             _canvas.Children.Clear();
             _canvas.RenderTransform = null;
             _rainbowBrushes.Clear();
+            _currentElement = null;
+            _glowElement = null;
         }
 
         /// <summary>
-        /// Привязывает значение (в DIP) к границе физического пикселя с учётом DPI,
-        /// чтобы тонкие прямоугольники рендерились без антиалиасинга (полупрозрачных краёв).
+
+
         /// </summary>
         private double Snap(double value)
         {
@@ -140,7 +182,7 @@ namespace VoidUI.Services
             _rainbowBrushes.Add(vBrush);
             double t = CrosshairGeometry.Thickness(state.Thickness);
 
-            // Геометрия — из общего CrosshairGeometry, что и в превью.
+
             var bars = new List<Bar>();
             CrosshairGeometry.CrossBars(center, center, state.Size, t, bars);
             int idx = 0;
@@ -217,6 +259,65 @@ namespace VoidUI.Services
             };
         }
 
+
+        private static System.Windows.Size ElementSize(FrameworkElement element)
+        {
+            if (element is Canvas cvs)
+                return new System.Windows.Size(double.IsNaN(cvs.Width) ? 0 : cvs.Width,
+                                                double.IsNaN(cvs.Height) ? 0 : cvs.Height);
+            if (!double.IsNaN(element.Width) && !double.IsNaN(element.Height))
+                return new System.Windows.Size(element.Width, element.Height);
+
+            element.Measure(new System.Windows.Size(double.PositiveInfinity, double.PositiveInfinity));
+            return element.DesiredSize;
+        }
+
+        /// <summary>
+
+
+
+
+        /// </summary>
+        private FrameworkElement CreateGlowHalo(CrosshairState state)
+        {
+            const double box = 400.0;
+            double half = box / 2.0;
+
+            var halo = new Canvas { Width = box, Height = box };
+            bool any = false;
+
+            foreach (var (ringScale, ringOpacity) in CrosshairGeometry.GlowRings)
+            {
+                var preset = CreatePreset(state);
+                if (preset == null) continue;
+
+                var sz = ElementSize(preset);
+
+
+
+                var ring = new Canvas
+                {
+                    Width = sz.Width,
+                    Height = sz.Height,
+                    Opacity = ringOpacity
+                };
+                Canvas.SetLeft(preset, 0);
+                Canvas.SetTop(preset, 0);
+                ring.Children.Add(preset);
+                ring.RenderTransformOrigin = new Point(0.5, 0.5);
+                ring.RenderTransform = new ScaleTransform(ringScale, ringScale);
+
+                Canvas.SetLeft(ring, Snap(half - sz.Width / 2.0));
+                Canvas.SetTop(ring, Snap(half - sz.Height / 2.0));
+                halo.Children.Add(ring);
+                any = true;
+            }
+
+            if (!any) return null;
+            halo.Opacity = CrosshairGeometry.GlowHaloMax;
+            return halo;
+        }
+
         private void ApplyAnimations(CrosshairState state, double cx, double cy)
         {
             _animStoryboard = new Storyboard();
@@ -224,10 +325,10 @@ namespace VoidUI.Services
 
             if (_currentElement is FrameworkElement fe)
             {
-                // Трансформ нужен только при реально включённой анимации:
-                // пустой TransformGroup всё равно включает трансформ-пайплайн
-                // и ломает покадровый снаппинг (тонкие линии становятся полупрозрачными).
-                // Ось вращения — центр элемента (= центр прицела), как в превью.
+
+
+
+
                 fe.RenderTransformOrigin = new Point(0.5, 0.5);
                 switch (state.Animation)
                 {
@@ -246,7 +347,16 @@ namespace VoidUI.Services
                         break;
                     }
                     case "glow":
-                        AddOpacityAnimation(fe, duration, state.Opacity / 100.0, (state.Opacity / 100.0) * CrosshairGeometry.GlowDim);
+
+
+
+
+                        if (_glowElement != null)
+                        {
+                            AddOpacityAnimation(_glowElement, duration,
+                                CrosshairGeometry.GlowHaloMin,
+                                CrosshairGeometry.GlowHaloMax);
+                        }
                         break;
                 }
             }
@@ -273,33 +383,45 @@ namespace VoidUI.Services
 
             int transformIdx = existingTg.Children.Count;
 
-            if (state.SpinEnabled && _currentElement != null)
+
+
+            var targets = _glowElement != null
+                ? new List<FrameworkElement> { _glowElement, _currentElement }
+                : new List<FrameworkElement> { _currentElement };
+
+            if (state.SpinEnabled)
             {
-                // Вращаем вокруг центра прицела, а не вокруг левого верхнего угла элемента —
-                // иначе спин выглядит как «орбита» и расходится с превью.
-                _currentElement.RenderTransformOrigin = new Point(0.5, 0.5);
                 var spinDur = new Duration(TimeSpan.FromSeconds(CrosshairGeometry.SpinDuration(state.SpinSpeed)));
-                var spinAnim = new DoubleAnimation(0, 360, spinDur)
-                {
-                    RepeatBehavior = RepeatBehavior.Forever
-                };
 
-                if (state.SpinDir == "reverse")
-                    spinAnim.SpeedRatio = -1;
 
-                var feTg = _currentElement.RenderTransform as TransformGroup;
-                if (feTg == null)
+
+                bool spinReverse = state.SpinDir == "reverse";
+
+                foreach (var target in targets)
                 {
-                    feTg = new TransformGroup();
-                    _currentElement.RenderTransform = feTg;
+                    if (target == null) continue;
+
+
+                    target.RenderTransformOrigin = new Point(0.5, 0.5);
+                    var spinAnim = new DoubleAnimation(spinReverse ? 360 : 0, spinReverse ? 0 : 360, spinDur)
+                    {
+                        RepeatBehavior = RepeatBehavior.Forever
+                    };
+
+                    var feTg = target.RenderTransform as TransformGroup;
+                    if (feTg == null)
+                    {
+                        feTg = new TransformGroup();
+                        target.RenderTransform = feTg;
+                    }
+                    var rotateTransform = new RotateTransform(0);
+                    feTg.Children.Add(rotateTransform);
+
+                    _motionStoryboard.Children.Add(spinAnim);
+                    Storyboard.SetTarget(spinAnim, target);
+                    Storyboard.SetTargetProperty(spinAnim, new PropertyPath(
+                        $"(UIElement.RenderTransform).(TransformGroup.Children)[{feTg.Children.Count - 1}].(RotateTransform.Angle)"));
                 }
-                var rotateTransform = new RotateTransform(0);
-                feTg.Children.Add(rotateTransform);
-
-                _motionStoryboard.Children.Add(spinAnim);
-                Storyboard.SetTarget(spinAnim, _currentElement);
-                Storyboard.SetTargetProperty(spinAnim, new PropertyPath(
-                    $"(UIElement.RenderTransform).(TransformGroup.Children)[{feTg.Children.Count - 1}].(RotateTransform.Angle)"));
             }
 
             if (state.OrbitEnabled)
@@ -307,32 +429,32 @@ namespace VoidUI.Services
                 var orbitDur = new Duration(TimeSpan.FromSeconds(CrosshairGeometry.OrbitDuration(state.OrbitSpeed)));
                 double radius = state.OrbitRadius;
 
-                var orbitAngleAnim = new DoubleAnimation(0, 360, orbitDur)
+
+                bool orbitReverse = state.OrbitDir == "reverse";
+                var orbitAngleAnim = new DoubleAnimation(orbitReverse ? 360 : 0, orbitReverse ? 0 : 360, orbitDur)
                 {
                     RepeatBehavior = RepeatBehavior.Forever
                 };
 
-                if (state.OrbitDir == "reverse")
-                    orbitAngleAnim.SpeedRatio = -1;
+                var orbitTransform = new RotateTransform(0, cx, cy);
+                existingTg.Children.Add(orbitTransform);
 
-                if (_currentElement != null)
+                foreach (var target in targets)
                 {
-                    var orbitTransform = new RotateTransform(0, cx, cy);
-                    existingTg.Children.Add(orbitTransform);
-
-                    var feTg = _currentElement.RenderTransform as TransformGroup;
+                    if (target == null) continue;
+                    var feTg = target.RenderTransform as TransformGroup;
                     if (feTg == null)
                     {
                         feTg = new TransformGroup();
-                        _currentElement.RenderTransform = feTg;
+                        target.RenderTransform = feTg;
                     }
                     feTg.Children.Add(new TranslateTransform(radius, 0));
-
-                    _motionStoryboard.Children.Add(orbitAngleAnim);
-                    Storyboard.SetTarget(orbitAngleAnim, _canvas);
-                    Storyboard.SetTargetProperty(orbitAngleAnim, new PropertyPath(
-                        $"(UIElement.RenderTransform).(TransformGroup.Children)[{transformIdx}].(RotateTransform.Angle)"));
                 }
+
+                _motionStoryboard.Children.Add(orbitAngleAnim);
+                Storyboard.SetTarget(orbitAngleAnim, _canvas);
+                Storyboard.SetTargetProperty(orbitAngleAnim, new PropertyPath(
+                    $"(UIElement.RenderTransform).(TransformGroup.Children)[{transformIdx}].(RotateTransform.Angle)"));
             }
 
             if (_motionStoryboard.Children.Count > 0)
@@ -381,13 +503,23 @@ namespace VoidUI.Services
             tg.Children.Add(scale);
             int idx = tg.Children.Count - 1;
 
-            var animX = new DoubleAnimation(from, to, duration) { AutoReverse = true };
+
+
+            var animX = new DoubleAnimation(from, to, duration)
+            {
+                AutoReverse = true,
+                EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut }
+            };
             Storyboard.SetTarget(animX, element);
             Storyboard.SetTargetProperty(animX, new PropertyPath(
                 $"(UIElement.RenderTransform).(TransformGroup.Children)[{idx}].(ScaleTransform.ScaleX)"));
             _animStoryboard.Children.Add(animX);
 
-            var animY = new DoubleAnimation(from, to, duration) { AutoReverse = true };
+            var animY = new DoubleAnimation(from, to, duration)
+            {
+                AutoReverse = true,
+                EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut }
+            };
             Storyboard.SetTarget(animY, element);
             Storyboard.SetTargetProperty(animY, new PropertyPath(
                 $"(UIElement.RenderTransform).(TransformGroup.Children)[{idx}].(ScaleTransform.ScaleY)"));
@@ -396,7 +528,11 @@ namespace VoidUI.Services
 
         private void AddOpacityAnimation(FrameworkElement element, Duration duration, double from, double to)
         {
-            var anim = new DoubleAnimation(from, to, duration) { AutoReverse = true };
+            var anim = new DoubleAnimation(from, to, duration)
+            {
+                AutoReverse = true,
+                EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut }
+            };
             Storyboard.SetTarget(anim, element);
             Storyboard.SetTargetProperty(anim, new PropertyPath(UIElement.OpacityProperty));
             _animStoryboard.Children.Add(anim);

@@ -19,12 +19,10 @@ public partial class HomePage : UserControl
         "#6bb5ff", "#b06bff", "#ff6bda", "#6bffe0"
     };
 
-    // (width, height, isWrapped) — wrapped = candy with twisted ends
-    private static readonly (double W, double H, bool Wrapped)[] CandyTypes =
+    // (width, height) — wrapped candy with twisted ends (SVG style)
+    private static readonly (double W, double H)[] CandyTypes =
     {
-        (22, 10, true), (18, 8, true), (16, 16, false), (24, 9, true),
-        (14, 14, false), (20, 8, true), (12, 12, false), (26, 10, true),
-        (10, 10, false), (18, 9, true),
+        (44, 20), (36, 16), (48, 18), (40, 16), (52, 20), (36, 18),
     };
 
     public HomePage(Action<string> navigateTo)
@@ -65,7 +63,7 @@ public partial class HomePage : UserControl
         var cardGraphics = this.FindControl<Border>("CardGraphics");
         var cardBinds = this.FindControl<Border>("CardBinds");
         var cardHelpers = this.FindControl<Border>("CardHelpers");
-        var cardCombat = this.FindControl<Border>("CardCombat");
+        var cardTracker = this.FindControl<Border>("CardTracker");
         var githubBtn = this.FindControl<Button>("GitHubBtn");
         var donateBtn = this.FindControl<Button>("DonateBtn");
         var settingsBtn = this.FindControl<Button>("SettingsBtn");
@@ -74,7 +72,7 @@ public partial class HomePage : UserControl
         if (cardGraphics != null) cardGraphics.PointerPressed += (_, _) => _navigateTo("graphics");
         if (cardBinds != null) cardBinds.PointerPressed += (_, _) => _navigateTo("binds");
         if (cardHelpers != null) cardHelpers.PointerPressed += (_, _) => _navigateTo("helpers");
-        if (cardCombat != null) cardCombat.PointerPressed += (_, _) => _navigateTo("combat");
+        if (cardTracker != null) cardTracker.PointerPressed += (_, _) => _navigateTo("tracker");
         if (githubBtn != null) githubBtn.Click += (_, _) => System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("https://github.com/zeuthe/void-ui") { UseShellExecute = true });
         if (donateBtn != null) donateBtn.Click += (_, _) => OpenDonateWindow();
         if (settingsBtn != null) settingsBtn.Click += (_, _) => _navigateTo("settings");
@@ -455,92 +453,92 @@ public partial class HomePage : UserControl
     private DateTime _animStart;
     private bool _animDone;
 
-    private Border CreateCandy(string color, double w, double h, bool wrapped)
+    private Border CreateCandy(string color, double w, double h)
     {
         var brush = new SolidColorBrush(Color.Parse(color)) { Opacity = 0.92 };
         var dark = new SolidColorBrush(Color.Parse(color)) { Opacity = 0.7 };
 
-        if (!wrapped)
-        {
-            // round candy / lollipop — circle with a white dot
-            var round = new Border
-            {
-                Width = w, Height = h,
-                CornerRadius = new CornerRadius(h / 2),
-                Background = brush,
-            };
-            var dot = new Border
-            {
-                Width = w * 0.3, Height = h * 0.3,
-                CornerRadius = new CornerRadius(100),
-                HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
-                VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-                Margin = new Thickness(-2, -3, 0, 0),
-                Background = new SolidColorBrush(Colors.White) { Opacity = 0.5 },
-            };
-            round.Child = dot;
-            return round;
-        }
-
-        // wrapped candy: body + two twisted ends
-        var cw = w * 0.55;   // body width
-        var ch = h;          // body height
-        var tw = w * 0.22;   // twist width
-        var th = h * 0.5;    // twist height (narrower)
-
         var canvas = new Canvas { Width = w, Height = h };
 
-        // center body (pill)
-        var body = new Border
+        // Конфета 1:1 по SVG (200x100): острые хвостики-стрелки, эллипс-тело, блик.
+        double sx = w / 200.0, sy = h / 100.0;
+
+        var svgBody = new Border
         {
-            Width = cw, Height = ch,
-            CornerRadius = new CornerRadius(ch / 2),
+            Width = 64 * sx, Height = 52 * sy,
+            CornerRadius = new CornerRadius(999),
             Background = brush,
         };
-        Canvas.SetLeft(body, (w - cw) / 2);
-        Canvas.SetTop(body, 0);
-        canvas.Children.Add(body);
+        Canvas.SetLeft(svgBody, 68 * sx);
+        Canvas.SetTop(svgBody, 24 * sy);
+        canvas.Children.Add(svgBody);
 
-        // white stripe on body
-        var stripe = new Border
+        var leftTail = new[] { new Point(20, 20), new Point(75, 47), new Point(75, 53), new Point(20, 80), new Point(35, 50) };
+        var rightTail = new[] { new Point(180, 20), new Point(125, 47), new Point(125, 53), new Point(180, 80), new Point(165, 50) };
+        foreach (var tail in new[] { leftTail, rightTail })
         {
-            Width = cw * 0.3, Height = ch - 2,
-            CornerRadius = new CornerRadius(ch),
-            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
-            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-            Background = new SolidColorBrush(Colors.White) { Opacity = 0.2 },
-        };
-        body.Child = stripe;
+            var geo = new Avalonia.Media.StreamGeometry();
+            using (var gc = geo.Open())
+            {
+                gc.BeginFigure(new Point(tail[0].X * sx, tail[0].Y * sy), true);
+                for (int k = 1; k < tail.Length; k++)
+                    gc.LineTo(new Point(tail[k].X * sx, tail[k].Y * sy));
+                gc.EndFigure(true);
+            }
+            canvas.Children.Add(new Avalonia.Controls.Shapes.Path { Data = geo, Fill = dark });
+        }
 
-        // left twist — rotated triangle shape
-        var lt = new Border
+        var glint = new Border
         {
-            Width = tw, Height = th,
-            CornerRadius = new CornerRadius(1, th / 2, 1, th / 2),
-            Background = dark,
-            RenderTransform = new RotateTransform(-15),
+            Width = 14 * sx, Height = 8 * sy,
+            CornerRadius = new CornerRadius(999),
+            Background = new SolidColorBrush(Colors.White) { Opacity = 0.9 },
+            RenderTransform = new RotateTransform(-30),
         };
-        Canvas.SetLeft(lt, (w - cw) / 2 - tw + 3);
-        Canvas.SetTop(lt, (h - th) / 2);
-        canvas.Children.Add(lt);
+        Canvas.SetLeft(glint, 87 * sx);
+        Canvas.SetTop(glint, 34 * sy);
+        canvas.Children.Add(glint);
 
-        // right twist
-        var rt = new Border
+        var spark = new Border
         {
-            Width = tw, Height = th,
-            CornerRadius = new CornerRadius(th / 2, 1, th / 2, 1),
-            Background = dark,
-            RenderTransform = new RotateTransform(15),
+            Width = 4 * sx, Height = 4 * sy,
+            CornerRadius = new CornerRadius(999),
+            Background = new SolidColorBrush(Colors.White) { Opacity = 0.9 },
         };
-        Canvas.SetLeft(rt, (w + cw) / 2 - 3);
-        Canvas.SetTop(rt, (h - th) / 2);
-        canvas.Children.Add(rt);
+        Canvas.SetLeft(spark, 103 * sx);
+        Canvas.SetTop(spark, 32 * sy);
+        canvas.Children.Add(spark);
+
+
 
         return new Border
         {
             Child = canvas,
             Width = w, Height = h,
         };
+    }
+
+    /// <summary>Случайный сочный цвет конфеты: оттенок разный у каждой, насыщенность и яркость — в пределах палитры.</summary>
+    private static string RandomCandyColor(Random rnd)
+    {
+        double h = rnd.NextDouble() * 6.0;                       // оттенок 0..6
+        double s = 0.55 + rnd.NextDouble() * 0.30;
+        double v = 0.80 + rnd.NextDouble() * 0.20;
+        int i = (int)h; double f = h - i;
+        double p = v * (1 - s), q = v * (1 - s * f), t = v * (1 - s * (1 - f));
+        double r = 0, g = 0, b = 0;
+        switch (i % 6)
+        {
+            case 0: r = v; g = t; b = p; break;
+            case 1: r = q; g = v; b = p; break;
+            case 2: r = p; g = v; b = t; break;
+            case 3: r = p; g = q; b = v; break;
+            case 4: r = t; g = p; b = v; break;
+            default: r = v; g = p; b = q; break;
+        }
+        return "#" + ((byte)(r * 255)).ToString("X2")
+                   + ((byte)(g * 255)).ToString("X2")
+                   + ((byte)(b * 255)).ToString("X2");
     }
 
     private void SpawnConfetti()
@@ -553,10 +551,10 @@ public partial class HomePage : UserControl
 
         for (int i = 0; i < count; i++)
         {
-            var (w, h, wrapped) = CandyTypes[i % CandyTypes.Length];
-            var color = CandyColors[i % CandyColors.Length];
+            var (w, h) = CandyTypes[i % CandyTypes.Length];
+            var color = RandomCandyColor(rnd);
 
-            var candy = CreateCandy(color, w, h, wrapped);
+            var candy = CreateCandy(color, w, h);
 
             double startX = -50 + rnd.NextDouble() * 1100;
             double startY = -80 - rnd.NextDouble() * 60;

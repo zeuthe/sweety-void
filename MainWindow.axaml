@@ -24,6 +24,7 @@
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="CornerRadius" Value="0"/>
         </Style>
+        
         <Style Selector="Button:pointerover /template/ ContentPresenter">
             <Setter Property="Background" Value="Transparent"/>
         </Style>
@@ -34,17 +35,25 @@
             <Setter Property="Padding" Value="18,0"/>
             <Setter Property="FontSize" Value="12.5"/>
             <Setter Property="FontWeight" Value="600"/>
-            <Setter Property="CornerRadius" Value="10"/>
+            <Setter Property="CornerRadius" Value="{DynamicResource BtnCorner}"/>
             <Setter Property="Margin" Value="1,0"/>
-            <Setter Property="Foreground" Value="{StaticResource TextTertiary}"/>
-            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+            <Setter Property="Background" Value="{StaticResource BtnBg}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BtnBorder}"/>
         </Style>
-        <Style Selector="Button.tab:pointerover">
-            <Setter Property="Background" Value="{StaticResource SurfaceHigh}"/>
-            <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
+        <Style Selector="Button.tab:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource BtnBgHover}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BtnBorderHover}"/>
+        </Style>
+        <Style Selector="Button.tab:pressed /template/ ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource BtnBgPressed}"/>
+        </Style>
+        <Style Selector="Button.tab.active /template/ ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource AccentSubtle}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource AccentDefault}"/>
         </Style>
         <Style Selector="Button.tab.active">
-            <Setter Property="Background" Value="{StaticResource AccentSubtle}"/>
             <Setter Property="Foreground" Value="{StaticResource AccentDefault}"/>
             <Setter Property="FontWeight" Value="700"/>
         </Style>
@@ -55,15 +64,15 @@
             <Setter Property="Padding" Value="24,0"/>
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="FontWeight" Value="600"/>
-            <Setter Property="CornerRadius" Value="10"/>
-            <Setter Property="Background" Value="{StaticResource SurfaceMid}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource BorderDefault}"/>
+            <Setter Property="CornerRadius" Value="{DynamicResource BtnCorner}"/>
+            <Setter Property="Background" Value="{StaticResource BtnBg}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BtnBorder}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
+            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
         </Style>
         <Style Selector="Button.play:pointerover /template/ ContentPresenter">
-            <Setter Property="Background" Value="{StaticResource SurfaceHigh}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource BorderStrong}"/>
+            <Setter Property="Background" Value="{StaticResource BtnBgHover}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BtnBorderHover}"/>
             <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
         </Style>
         <Style Selector="Button.play:pressed /template/ ContentPresenter">
@@ -78,16 +87,18 @@
             <Setter Property="Padding" Value="16,0"/>
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="FontWeight" Value="600"/>
-            <Setter Property="CornerRadius" Value="10"/>
-            <Setter Property="Background" Value="{StaticResource SurfaceMid}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource BorderDefault}"/>
+            <Setter Property="CornerRadius" Value="{DynamicResource BtnCorner}"/>
+            <Setter Property="Background" Value="{StaticResource BtnBg}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BtnBorder}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
-        </Style>
-        <Style Selector="Button.util:pointerover">
-            <Setter Property="Background" Value="{StaticResource SurfaceHigh}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource BorderStrong}"/>
             <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+        </Style>
+        <Style Selector="Button.util:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource BtnBgHover}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BtnBorderHover}"/>
+        </Style>
+        <Style Selector="Button.util:pressed /template/ ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource BtnBgPressed}"/>
         </Style>
 
         <!-- ─── WINDOW BUTTONS ─── -->
@@ -103,16 +114,20 @@
             <Setter Property="HorizontalContentAlignment" Value="Center"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
         </Style>
+        <Style Selector="Button.winbtn:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource SurfaceHigh}"/>
+        </Style>
         <Style Selector="Button.winbtn:pointerover">
             <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
-            <Setter Property="Background" Value="{StaticResource SurfaceHigh}"/>
         </Style>
         <Style Selector="Button.winbtn.close">
             <Setter Property="Foreground" Value="{StaticResource RedDefault}"/>
         </Style>
+        <Style Selector="Button.winbtn.close:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource RedDefault}"/>
+        </Style>
         <Style Selector="Button.winbtn.close:pointerover">
             <Setter Property="Foreground" Value="#ffffff"/>
-            <Setter Property="Background" Value="{StaticResource RedDefault}"/>
         </Style>
 
         <!-- ─── SEARCH ─── -->
@@ -140,7 +155,7 @@
             <Setter Property="BorderBrush" Value="{StaticResource BorderSubtle}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="CornerRadius" Value="16"/>
-            <Setter Property="Padding" Value="24"/>
+            <Setter Property="Padding" Value="28"/>
             <Setter Property="Cursor" Value="Hand"/>
         </Style>
         <Style Selector="Border.card:pointerover">
@@ -154,7 +169,7 @@
             <Setter Property="BorderBrush" Value="{StaticResource BorderSubtle}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="CornerRadius" Value="14"/>
-            <Setter Property="Padding" Value="24,20"/>
+            <Setter Property="Padding" Value="28,24"/>
         </Style>
         <Style Selector="Border.section:pointerover">
             <Setter Property="BorderBrush" Value="{StaticResource BorderDefault}"/>
@@ -186,21 +201,25 @@
             <Setter Property="Padding" Value="18,0"/>
             <Setter Property="FontSize" Value="12.5"/>
             <Setter Property="FontWeight" Value="600"/>
-            <Setter Property="CornerRadius" Value="9"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderBrush" Value="{StaticResource BorderDefault}"/>
+            <Setter Property="CornerRadius" Value="{DynamicResource BtnCorner}"/>
+            <Setter Property="Background" Value="{StaticResource BtnBg}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BtnBorder}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
+            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
             <Setter Property="Cursor" Value="Hand"/>
         </Style>
-        <Style Selector="Button.pill:pointerover">
-            <Setter Property="BorderBrush" Value="{StaticResource BorderStrong}"/>
-            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
-            <Setter Property="Background" Value="{StaticResource SurfaceHigh}"/>
+        <Style Selector="Button.pill:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource BtnBgHover}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BtnBorderHover}"/>
         </Style>
-        <Style Selector="Button.pill.active">
+        <Style Selector="Button.pill:pressed /template/ ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource BtnBgPressed}"/>
+        </Style>
+        <Style Selector="Button.pill.active /template/ ContentPresenter">
             <Setter Property="Background" Value="{StaticResource AccentSubtle}"/>
             <Setter Property="BorderBrush" Value="{StaticResource AccentDefault}"/>
+        </Style>
+        <Style Selector="Button.pill.active">
             <Setter Property="Foreground" Value="{StaticResource AccentDefault}"/>
         </Style>
 
@@ -210,13 +229,14 @@
             <Setter Property="Padding" Value="20,0"/>
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="FontWeight" Value="700"/>
-            <Setter Property="CornerRadius" Value="9"/>
+            <Setter Property="CornerRadius" Value="{DynamicResource BtnCorner}"/>
             <Setter Property="Background" Value="{StaticResource AccentDefault}"/>
             <Setter Property="Foreground" Value="#ffffff"/>
-            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="{StaticResource AccentEdge}"/>
             <Setter Property="Cursor" Value="Hand"/>
         </Style>
-        <Style Selector="Button.action:pointerover">
+        <Style Selector="Button.action:pointerover /template/ ContentPresenter">
             <Setter Property="Background" Value="{StaticResource AccentHover}"/>
         </Style>
 
@@ -224,18 +244,20 @@
         <Style Selector="Button.ghost">
             <Setter Property="Height" Value="34"/>
             <Setter Property="Padding" Value="16,0"/>
-            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontSize" Value="11.5"/>
             <Setter Property="FontWeight" Value="600"/>
-            <Setter Property="CornerRadius" Value="9"/>
-            <Setter Property="Background" Value="{StaticResource SurfaceMid}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource BorderDefault}"/>
+            <Setter Property="CornerRadius" Value="{DynamicResource BtnCorner}"/>
+            <Setter Property="Background" Value="{StaticResource BtnGhostBg}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BtnBorder}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
+            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
             <Setter Property="Cursor" Value="Hand"/>
         </Style>
+        <Style Selector="Button.ghost:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource BtnGhostBgHover}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BtnBorderHover}"/>
+        </Style>
         <Style Selector="Button.ghost:pointerover">
-            <Setter Property="Background" Value="{StaticResource SurfaceHigh}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource BorderStrong}"/>
             <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
         </Style>
 
@@ -249,6 +271,25 @@
             <Setter Property="CornerRadius" Value="10"/>
             <Setter Property="BorderThickness" Value="2"/>
             <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        
+        <Style Selector="Button.theme-btn:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource BtnGlassHover}"/>
+        </Style>
+
+        
+        <Style Selector="Border.new-badge">
+            <Setter Property="Background" Value="{StaticResource AccentDefault}"/>
+            <Setter Property="CornerRadius" Value="4"/>
+            <Setter Property="Padding" Value="5,1"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="7,0,0,0"/>
+        </Style>
+        <Style Selector="Border.new-badge TextBlock">
+            <Setter Property="FontSize" Value="8"/>
+            <Setter Property="FontWeight" Value="800"/>
+            <Setter Property="LetterSpacing" Value="0.6"/>
+            <Setter Property="Foreground" Value="#ffffff"/>
         </Style>
 
         <!-- ─── TOGGLE SWITCH ─── -->
@@ -446,8 +487,11 @@
                             <Button Classes="tab" Name="TabBinds" Content="Binds"/>
                             <Button Classes="tab" Name="TabHelpers" Content="Helpers"/>
                             <Button Classes="tab" Name="TabCrosshair" Content="Crosshair"/>
-                            <Button Classes="tab" Name="TabCombat" Content="Combat"/>
+                            <Button Classes="tab" Name="TabTracker" Content="Tracker"/>
                         </StackPanel>
+                        
+                        <Button Classes="play" Name="PlayBtn" Content="▶  PLAY"
+                                VerticalAlignment="Center" Margin="10,0,0,0"/>
                     </StackPanel>
 
                     <!-- Col 2: Overlay + Search + Min + Close — far right -->
@@ -459,10 +503,6 @@
                         <Button Classes="winbtn" Name="MinBtn" Content="—"/>
                         <Button Classes="winbtn close" Name="CloseBtn" Content="✕"/>
                     </StackPanel>
-
-                    <!-- Play — absolutely centered in top bar -->
-                    <Button Grid.Column="0" Grid.ColumnSpan="3" Grid.Row="0" Classes="play" Name="PlayBtn" Content="▶  PLAY"
-                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
 
                     <!-- Row 1: accent gradient line -->
                     <Border Grid.Row="1" Grid.ColumnSpan="3" Height="1.5" HorizontalAlignment="Stretch" Opacity="0.8">
@@ -511,19 +551,29 @@
             <!-- ═══ PAGE CONTENT ═══ -->
             <ContentControl Grid.Row="1" Name="PageContent" Margin="0" Background="Transparent"/>
 
+            
+            <Border Grid.Row="1" Name="StatusHint" ZIndex="20" IsVisible="False"
+                    VerticalAlignment="Bottom" HorizontalAlignment="Left" Margin="16,0,0,10"
+                    Background="{StaticResource SurfaceOverlay}"
+                    BorderBrush="{StaticResource BorderDefault}" BorderThickness="1"
+                    CornerRadius="8" Padding="12,8" MaxWidth="560">
+                <TextBlock Name="StatusHintText" Text="" FontSize="11.5" TextWrapping="Wrap"
+                           Foreground="{StaticResource TextSecondary}"/>
+            </Border>
+
             <!-- ═══ STATUS BAR ═══ -->
             <Border Grid.Row="2" Background="{StaticResource SurfaceBase}"
                     BorderBrush="{StaticResource BorderSubtle}" BorderThickness="0,1,0,0">
                 <Grid Margin="16,0" ColumnDefinitions="*,Auto,*">
 
-                    <!-- слева: какой файл парсится -->
-                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center"
-                                ClipToBounds="True">
-                        <Border Name="StatusFileDot" Width="6" Height="6" CornerRadius="3"
+                    
+                    <StackPanel Grid.Column="0" Name="StatusLeft" Orientation="Horizontal" Spacing="6"
+                                VerticalAlignment="Center" ClipToBounds="True">
+                        <Border Name="StatusFileDot" Width="6" Height="6" CornerRadius="6"
                                 Background="{StaticResource TextTertiary}" Margin="0,0,2,0"/>
                         <TextBlock Name="StatusFileLabel" Text="waiting" Foreground="{StaticResource TextSecondary}"
                                    FontSize="11" VerticalAlignment="Center"/>
-                        <!-- 3 символа всегда: точки появляются/пропадают, ширина не меняется -->
+                        
                         <TextBlock Name="StatusDots" Text="   " Width="24" TextAlignment="Left"
                                    Foreground="{StaticResource TextSecondary}" FontSize="11"
                                    FontFamily="Cascadia Code, Consolas, monospace" VerticalAlignment="Center"/>
@@ -533,11 +583,11 @@
                                    TextTrimming="CharacterEllipsis" MaxWidth="300"/>
                     </StackPanel>
 
-                    <!-- по центру: найден ли rust -->
+                    
                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6"
                                 VerticalAlignment="Center" HorizontalAlignment="Center"
                                 ClipToBounds="True">
-                        <Border Name="RustStatusDot" Width="6" Height="6" CornerRadius="3"
+                        <Border Name="RustStatusDot" Width="6" Height="6" CornerRadius="6"
                                 Background="{StaticResource TextTertiary}" Margin="0,0,2,0"/>
                         <TextBlock Name="RustStatusText" Text="rust dont found"
                                    Foreground="{StaticResource TextTertiary}" FontSize="11"
@@ -548,12 +598,14 @@
                                    ToolTip.Tip="Click: full rust path"/>
                     </StackPanel>
 
-                    <!-- справа: краткие статусные сообщения -->
+                    
                     <TextBlock Grid.Column="2" Name="BarStatusText" Text="Ready"
                                Foreground="{StaticResource TextTertiary}" FontSize="11"
                                HorizontalAlignment="Right" VerticalAlignment="Center"/>
                 </Grid>
             </Border>
+
+            <Canvas Name="AlucardDecor" Grid.RowSpan="3" IsVisible="False" IsHitTestVisible="False" ZIndex="200"/>
         </Grid>
     </Border>
 </Window>

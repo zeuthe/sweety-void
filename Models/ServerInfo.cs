@@ -16,7 +16,6 @@ namespace VoidUI.Models
         public string AvatarUrl { get; set; } = "";
         public string LastDeathTime { get; set; } = "";
         public int TimesKilledMe { get; set; }
-        public int TimesIKilled { get; set; }
         public List<DeathEvent> DeathHistory { get; set; } = new();
     }
 

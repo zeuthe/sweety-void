@@ -51,7 +51,7 @@
                                Foreground="{StaticResource TextTertiary}" HorizontalAlignment="Center"
                                FontFamily="avares://VoidUI/assets/Orbitron.ttf#Orbitron"
                                LetterSpacing="4" Margin="0,0,0,2"/>
-                    <TextBlock Text="Graphics presets, crosshair overlay, keybinds, combat analytics and more"
+                    <TextBlock Text="Graphics presets, crosshair overlay, keybinds, tracker analytics and more"
                                FontSize="11.5" Foreground="{StaticResource TextDisabled}" HorizontalAlignment="Center"
                                MaxWidth="460" TextWrapping="Wrap" TextAlignment="Center"/>
                 </StackPanel>
@@ -86,9 +86,9 @@
                         </StackPanel>
                     </Border>
 
-                    <Border Classes="card" Name="CardCombat" Width="170" Height="130" Margin="6">
+                    <Border Classes="card" Name="CardTracker" Width="170" Height="130" Margin="6">
                         <StackPanel VerticalAlignment="Center" Spacing="6">
-                            <TextBlock Text="Combat" FontSize="16" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}"/>
+                            <TextBlock Text="Tracker" FontSize="16" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}"/>
                             <TextBlock Text="Server tracking and analytics" FontSize="11" Foreground="{StaticResource TextTertiary}" TextWrapping="Wrap"/>
                         </StackPanel>
                     </Border>

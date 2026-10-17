@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -17,7 +18,14 @@ public partial class MainWindow : Window
 {
     private readonly SettingsService _settings;
     private readonly SteamService _steamService;
-    private readonly CombatService _combatService;
+    private readonly TrackerService _trackerService;
+
+
+
+    private readonly UpdateService _updateService;
+
+
+    private readonly FeatureFlags _features = FeatureFlags.Load();
 
     private string _currentTheme = "black";
 
@@ -28,18 +36,29 @@ public partial class MainWindow : Window
     private System.Timers.Timer? _themeWatcher;
     private Avalonia.Threading.DispatcherTimer? _statusTimer;
     private int _statusTick;
+
+
+    private string _doneCaption = "";
+    private int _doneTicks;
+    private bool _doneExpired;
     private string _workingFile = "output_log.txt";
     private bool _rustPathExpanded;
     private string? _rustFullPath;
     private bool _targetOk;
     private bool _rustMissing;
-    private bool _workStarted;     // открыты binds/graphics или запущен парс
+
+
+    private string? _cfgBusyFile;
+
+
+    private bool _workStarted;
 
     public MainWindow()
     {
         _settings = new SettingsService();
         _steamService = new SteamService();
-        _combatService = new CombatService(_steamService);
+        _trackerService = new TrackerService(_steamService);
+        _updateService = new UpdateService();
 
         InitializeComponent();
         Loaded += OnLoaded;
@@ -53,9 +72,27 @@ public partial class MainWindow : Window
         WireSearch();
         StartStatusBar();
         ApplyTheme(_settings.GetSettings().Theme ?? "black");
+        SizeChanged += (_, _) => { if (_currentTheme == "alucard") BuildAlucardDecor("alucard"); };
         NavigateTo("home");
         StartOverlay();
         StartThemeWatcher();
+        StartUpdateCheck();
+        WireStatusHint();
+    }
+
+
+
+    private void StartUpdateCheck()
+    {
+        try
+        {
+            var auto = string.Equals(_settings.GetSettings().UpdateMode, "auto",
+                StringComparison.OrdinalIgnoreCase);
+
+
+            _ = Task.Run(() => _updateService.StartCheck(auto));
+        }
+        catch {  }
     }
 
     #region Drag
@@ -78,11 +115,21 @@ public partial class MainWindow : Window
     private void WireTabButtons()
     {
         var tabs = new[] { ("TabGraphics", "graphics"), ("TabBinds", "binds"), ("TabHelpers", "helpers"),
-                           ("TabCrosshair", "crosshair"), ("TabCombat", "combat") };
+                           ("TabCrosshair", "crosshair"), ("TabTracker", "tracker") };
         foreach (var (name, page) in tabs)
         {
             var btn = this.FindControl<Button>(name);
-            if (btn != null) btn.Click += (_, _) => NavigateTo(page);
+            if (btn == null) continue;
+
+
+
+            if (!_features.IsEnabled(page))
+            {
+                btn.IsVisible = false;
+                continue;
+            }
+
+            btn.Click += (_, _) => NavigateTo(page);
         }
 
         var logoBtn = this.FindControl<Border>("LogoBtn");
@@ -94,7 +141,7 @@ public partial class MainWindow : Window
         var tabNames = new Dictionary<string, string>
         {
             ["graphics"] = "TabGraphics", ["binds"] = "TabBinds", ["helpers"] = "TabHelpers",
-            ["crosshair"] = "TabCrosshair", ["combat"] = "TabCombat"
+            ["crosshair"] = "TabCrosshair", ["tracker"] = "TabTracker"
         };
         foreach (var (pg, name) in tabNames)
         {
@@ -198,7 +245,7 @@ public partial class MainWindow : Window
             new("Binds", "Page", "page", "binds"),
             new("Helpers", "Page", "page", "helpers"),
             new("Crosshair", "Page", "page", "crosshair"),
-            new("Combat", "Page", "page", "combat"),
+            new("Tracker", "Page", "page", "tracker"),
             new("Settings", "Page", "page", "settings"),
 
             new("Dot preset", "Crosshair preset", "preset", "dot"),
@@ -209,12 +256,16 @@ public partial class MainWindow : Window
             new("Custom preset", "Crosshair preset", "preset", "custom"),
 
             new("Black theme", "Theme", "theme", "black"),
+            new("Alucard theme", "Theme", "theme", "alucard"),
             new("Glass theme", "Theme", "theme", "glass-black"),
             new("Retro theme", "Theme", "theme", "retro"),
             new("Pink theme", "Theme", "theme", "pink"),
             new("Slack theme", "Theme", "theme", "slack"),
             new("Cyber theme", "Theme", "theme", "cyber"),
-            new("Mono theme", "Theme", "theme", "mono")
+            new("Mono theme", "Theme", "theme", "mono"),
+            new("Nord theme", "Theme", "theme", "nord"),
+            new("Dracula theme", "Theme", "theme", "dracula"),
+            new("Amoled theme", "Theme", "theme", "amoled")
         };
 
         try
@@ -290,6 +341,9 @@ public partial class MainWindow : Window
 
     private void NavigateTo(string pageName)
     {
+
+        if (!_features.IsEnabled(pageName)) pageName = "home";
+
         UpdateTabActive(pageName);
         var content = this.FindControl<ContentControl>("PageContent");
         if (content == null) return;
@@ -304,18 +358,14 @@ public partial class MainWindow : Window
             "binds" => new Views.BindsPage(),
             "helpers" => new Views.HelpersPage(),
             "crosshair" => new Views.CrosshairPage(_settings, _overlayWindow, _overlayDispatcher),
-            "combat" => new Views.CombatPage(_combatService, _settings),
-            "settings" => new Views.SettingsPage(_settings, _currentTheme, ApplyTheme, ResetAll),
+            "tracker" => new Views.TrackerPage(_trackerService, _settings),
+            "settings" => new Views.SettingsPage(_settings, _currentTheme, ApplyTheme, ResetAll, _updateService),
             _ => new Views.GraphicsPage()
         };
         content.Content = page;
         SetStatus($"Page: {pageName}");
 
-        // Первая «работа»: открыли binds или graphics — ready уходит
-        if (pageName is "binds" or "graphics")
-            _workStarted = true;
 
-        // В баре показываем файл, с которым идёт работа на этой странице
         SetWorkingFile(pageName switch
         {
             "binds" => "cfg/keys.txt",
@@ -328,6 +378,79 @@ public partial class MainWindow : Window
 
     #region Theme
 
+
+    private sealed record Palette(
+        string Base, string Low, string Mid, string High, string Overlay,
+        string BSubtle, string BDef, string BStrong,
+        string TextPrimary, string TextSecondary, string TextTertiary, string TextDisabled,
+        string Accent, string AccentHover, string AccentSubtle,
+        string Font, string ButtonMode)
+    {
+
+        public static readonly Palette DefaultText = new(
+            "", "", "", "", "", "", "", "",
+            "#ededef", "#9d9da5", "#5c5c66", "#3a3a42",
+            "", "", "", "", "");
+    }
+
+    private static Palette PaletteFor(string theme, Models.ThemeSettings custom)
+    {
+
+        Palette With(string b, string l, string m, string h, string o,
+                     string bs, string bd, string bst,
+                     string a, string ah, string asub, string mode) =>
+            Palette.DefaultText with
+            {
+                Base = b, Low = l, Mid = m, High = h, Overlay = o,
+                BSubtle = bs, BDef = bd, BStrong = bst,
+                Accent = a, AccentHover = ah, AccentSubtle = asub, ButtonMode = mode
+            };
+
+        switch (theme)
+        {
+            case "glass-black":
+                return With("#07070a", "#0d0d11", "#131318", "#19191f", "#202028",
+                            "#16161b", "#1e1e25", "#2d2d36", "#60a5fa", "#7cb8ff", "#16233a", "glass");
+            case "retro":
+                return With("#0f0f1a", "#151525", "#1a1a2e", "#222240", "#2a2a50",
+                            "#1a1a35", "#25254a", "#35356a", "#fbbf24", "#fcd34d", "#3a2f10", "default");
+            case "pink":
+                return With("#100a0e", "#17101a", "#1e1520", "#251a28", "#2d1f30",
+                            "#201525", "#2d1a2a", "#3d2a3a", "#f472b6", "#f68fc7", "#3a1a2c", "default");
+            case "slack":
+                return With("#111315", "#161819", "#1c1e20", "#222426", "#282a2c",
+                            "#1e2022", "#252729", "#323436", "#94a3b8", "#a8b8c8", "#252e38", "flat");
+            case "cyber":
+                return With("#070a0e", "#0c1018", "#111620", "#171c28", "#1d2330",
+                            "#121825", "#1a2332", "#253040", "#34d399", "#5ee0b4", "#0f2a24", "default");
+            case "mono":
+                return With("#0c0c0c", "#111111", "#1a1a1a", "#222222", "#2a2a2a",
+                            "#1a1a1a", "#2a2a2a", "#3a3a3a", "#a1a1aa", "#b4b4bc", "#262626", "flat");
+            case "nord":
+                return With("#232833", "#2e3440", "#3b4252", "#434c5e", "#4c566a",
+                            "#2e3440", "#3b4252", "#4c566a", "#88c0d0", "#8fbcbb", "#263440", "default");
+            case "dracula":
+                return With("#1c1d26", "#21222c", "#282a36", "#2f3141", "#44475a",
+                            "#25262f", "#2f3141", "#44475a", "#bd93f9", "#cea6f5", "#2c2440", "default");
+            case "amoled":
+                return With("#000000", "#050506", "#0b0b0d", "#121215", "#1a1a1e",
+                            "#1b1b20", "#26262c", "#3a3a42", "#ff3d84", "#ff6ba3", "#3a1224", "flat");
+            case "alucard":
+                return With("#0a0002", "#120205", "#1a0308", "#24050c", "#2e0710",
+                            "#2a0509", "#3a060d", "#5c0a17", "#c1121f", "#e01e2d", "#2b0509", "flat");
+            case "custom" when custom != null:
+                return new(
+                    custom.SurfaceBase, custom.SurfaceLow, custom.SurfaceMid, custom.SurfaceHigh, custom.SurfaceOverlay,
+                    custom.BorderSubtle, custom.BorderDefault, custom.BorderStrong,
+                    custom.TextPrimary, custom.TextSecondary, custom.TextTertiary, custom.TextDisabled,
+                    custom.AccentDefault, custom.AccentHover, custom.AccentSubtle,
+                    custom.FontFamily, custom.ButtonMode);
+            default:
+                return With("#0c0c0e", "#111114", "#18181c", "#1f1f24", "#27272e",
+                            "#1a1a1f", "#232329", "#35353d", "#7c5cfc", "#9178ff", "#2a2248", "default");
+        }
+    }
+
     private void ApplyTheme(string theme)
     {
         _currentTheme = theme;
@@ -336,36 +459,197 @@ public partial class MainWindow : Window
         var resources = Application.Current?.Resources;
         if (resources == null) return;
 
-        var c = theme switch
-        {
-            "black" => new { Base = "#0c0c0e", Low = "#111114", Mid = "#18181c", High = "#1f1f24", Overlay = "#27272e", BSubtle = "#1a1a1f", BDef = "#232329", BStrong = "#35353d" },
-            "glass-black" => new { Base = "#07070a", Low = "#0d0d11", Mid = "#131318", High = "#19191f", Overlay = "#202028", BSubtle = "#16161b", BDef = "#1e1e25", BStrong = "#2d2d36" },
-            "retro" => new { Base = "#0f0f1a", Low = "#151525", Mid = "#1a1a2e", High = "#222240", Overlay = "#2a2a50", BSubtle = "#1a1a35", BDef = "#25254a", BStrong = "#35356a" },
-            "pink" => new { Base = "#100a0e", Low = "#17101a", Mid = "#1e1520", High = "#251a28", Overlay = "#2d1f30", BSubtle = "#201525", BDef = "#2d1a2a", BStrong = "#3d2a3a" },
-            "slack" => new { Base = "#111315", Low = "#161819", Mid = "#1c1e20", High = "#222426", Overlay = "#282a2c", BSubtle = "#1e2022", BDef = "#252729", BStrong = "#323436" },
-            "cyber" => new { Base = "#070a0e", Low = "#0c1018", Mid = "#111620", High = "#171c28", Overlay = "#1d2330", BSubtle = "#121825", BDef = "#1a2332", BStrong = "#253040" },
-            "mono" => new { Base = "#0c0c0c", Low = "#111111", Mid = "#1a1a1a", High = "#222222", Overlay = "#2a2a2a", BSubtle = "#1a1a1a", BDef = "#2a2a2a", BStrong = "#3a3a3a" },
-            _ => new { Base = "#0c0c0e", Low = "#111114", Mid = "#18181c", High = "#1f1f24", Overlay = "#27272e", BSubtle = "#1a1a1f", BDef = "#232329", BStrong = "#35353d" }
-        };
+        var p = PaletteFor(theme, _settings.GetSettings().CustomTheme);
 
-        SetBrush("SurfaceBase", c.Base);
-        SetBrush("SurfaceLow", c.Low);
-        SetBrush("SurfaceMid", c.Mid);
-        SetBrush("SurfaceHigh", c.High);
-        SetBrush("SurfaceOverlay", c.Overlay);
-        SetBrush("BorderSubtle", c.BSubtle);
-        SetBrush("BorderDefault", c.BDef);
-        SetBrush("BorderStrong", c.BStrong);
+        SetBrush("SurfaceBase", p.Base);
+        SetBrush("SurfaceLow", p.Low);
+        SetBrush("SurfaceMid", p.Mid);
+        SetBrush("SurfaceHigh", p.High);
+        SetBrush("SurfaceOverlay", p.Overlay);
+
+        SetBrush("BorderSubtle", p.BSubtle);
+        SetBrush("BorderDefault", p.BDef);
+        SetBrush("BorderStrong", p.BStrong);
+
+
+
+        SetBrush("TextPrimary", p.TextPrimary);
+        SetBrush("TextSecondary", p.TextSecondary);
+        SetBrush("TextTertiary", p.TextTertiary);
+        SetBrush("TextDisabled", p.TextDisabled);
+
+        SetBrush("AccentDefault", p.Accent);
+        SetBrush("AccentHover", p.AccentHover);
+        SetBrush("AccentSubtle", p.AccentSubtle);
+
+        var style = _settings.GetSettings();
+        ApplyFont(string.IsNullOrWhiteSpace(style.UiFont) ? p.Font : style.UiFont);
+        ApplyButtonMode(string.IsNullOrWhiteSpace(style.UiButtonMode) ? p.ButtonMode : style.UiButtonMode);
+
+        BuildAlucardDecor(theme);
 
         SetStatus($"Theme: {theme}");
 
         void SetBrush(string key, string hex)
         {
+            if (string.IsNullOrEmpty(hex)) return;
             if (resources.TryGetResource(key, null, out var existing) && existing is SolidColorBrush old)
             {
                 old.Color = Color.Parse(hex);
             }
         }
+    }
+
+
+    private void ApplyFont(string font)
+    {
+        var resources = Application.Current?.Resources;
+        if (resources == null || string.IsNullOrWhiteSpace(font)) return;
+
+        try { resources["AppFontFamily"] = new FontFamily(font); }
+        catch {  }
+    }
+
+
+    private void ApplyButtonMode(string mode)
+    {
+        var resources = Application.Current?.Resources;
+        if (resources == null) return;
+
+
+        resources["BtnCorner"] = mode switch
+        {
+            "glass" => new CornerRadius(15),
+            "flat" => new CornerRadius(2),
+            _ => new CornerRadius(9)
+        };
+
+
+
+        if (resources.TryGetResource("BtnGhostBg", null, out var bg) && bg is SolidColorBrush bgBrush)
+            bgBrush.Color = Color.Parse(mode switch
+            {
+                "glass" => "#1a1a1e",
+                "flat" => "#00000000",
+                _ => "#17171a"
+            });
+
+        if (resources.TryGetResource("BtnGhostBgHover", null, out var hov) && hov is SolidColorBrush hovBrush)
+            hovBrush.Color = Color.Parse(mode switch
+            {
+                "glass" => "#24242a",
+                "flat" => "#26262b",
+                _ => "#26262b"
+            });
+    }
+
+    private sealed record BloodTrickle(Border Segment, double Length, double SegmentH, double Offset, double Speed);
+
+    private readonly List<BloodTrickle> _bloodTrickles = new();
+    private Avalonia.Threading.DispatcherTimer? _bloodTimer;
+    private double _bloodClock;
+
+    // ── Alucard theme: blood trickles + gothic cross ───────────────────────
+
+    private void BuildAlucardDecor(string theme)
+    {
+        var decor = this.FindControl<Canvas>("AlucardDecor");
+        if (decor == null) return;
+
+        decor.Children.Clear();
+        _bloodTimer?.Stop();
+        _bloodTimer = null;
+        _bloodTrickles.Clear();
+
+        decor.IsVisible = theme == "alucard";
+        if (!decor.IsVisible) return;
+
+        var w = Bounds.Width > 0 ? Bounds.Width : Width;
+        var rnd = new Random(13);
+        var cx = w * 0.63 - 7;
+
+        // Blood: thin trickles hanging from the top edge, each ending in a drop.
+        for (int i = 0; i < 30; i++)
+        {
+            double x = rnd.NextDouble() * w;
+            double dw = 3 + rnd.NextDouble() * 6;
+            double dh = 12 + rnd.NextDouble() * 34;
+            if (x > cx - 22 && x < cx + 32) continue;   // keep the cross clear
+            var red = rnd.NextDouble() < 0.35 ? "#c1121f" : "#7a0810";
+
+            var body = new Border
+            {
+                Width = dw,
+                Height = dh,
+                CornerRadius = new CornerRadius(0, 0, dw / 2, dw / 2),
+                Background = new SolidColorBrush(Color.Parse(red)) { Opacity = 0.8 },
+            };
+            Canvas.SetLeft(body, x);
+            Canvas.SetTop(body, 0);
+            decor.Children.Add(body);
+
+            var segH = 3 + rnd.NextDouble() * 4;
+            var seg = new Border
+            {
+                Width = dw,
+                Height = segH,
+                CornerRadius = new CornerRadius(0, 0, dw / 2, dw / 2),
+                Background = new SolidColorBrush(Color.Parse("#e01e2d")) { Opacity = 0.95 },
+            };
+            Canvas.SetLeft(seg, x);
+            Canvas.SetTop(seg, -segH);
+            decor.Children.Add(seg);
+
+            _bloodTrickles.Add(new BloodTrickle(seg, dh, segH, rnd.NextDouble(), 0.55 + rnd.NextDouble() * 0.8));
+        }
+
+        // Church: a gothic cross in the empty part of the title bar, bleeding.
+        var crossV = new Border
+        {
+            Width = 6, Height = 32,
+            CornerRadius = new CornerRadius(1),
+            Background = new SolidColorBrush(Color.Parse("#8b0a12")),
+            BorderBrush = new SolidColorBrush(Color.Parse("#e01e2d")),
+            BorderThickness = new Thickness(1),
+        };
+        Canvas.SetLeft(crossV, cx);
+        Canvas.SetTop(crossV, 4);
+        decor.Children.Add(crossV);
+
+        var crossH = new Border
+        {
+            Width = 24, Height = 6,
+            CornerRadius = new CornerRadius(1),
+            Background = new SolidColorBrush(Color.Parse("#8b0a12")),
+            BorderBrush = new SolidColorBrush(Color.Parse("#e01e2d")),
+            BorderThickness = new Thickness(1),
+        };
+        Canvas.SetLeft(crossH, cx - 9);
+        Canvas.SetTop(crossH, 12);
+        decor.Children.Add(crossH);
+
+        StartBloodFlow();
+    }
+
+    // One bright pulse slides down every trickle, each at its own speed and
+    // phase, so the blood looks like it is actually running.
+    private void StartBloodFlow()
+    {
+        _bloodTimer?.Stop();
+        _bloodClock = 0;
+
+        _bloodTimer = new Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(60) };
+        _bloodTimer.Tick += (_, _) =>
+        {
+            _bloodClock += 0.06;
+            foreach (var t in _bloodTrickles)
+            {
+                var p = (_bloodClock * t.Speed + t.Offset) % 1.0;
+                Canvas.SetTop(t.Segment, -t.SegmentH + p * (t.Length + t.SegmentH));
+                t.Segment.Opacity = p > 0.82 ? 0.95 * (1 - (p - 0.82) / 0.18) : 0.95;
+            }
+        };
+        _bloodTimer.Start();
     }
 
     private void StartThemeWatcher()
@@ -397,7 +681,7 @@ public partial class MainWindow : Window
 
     #region Steam / Overlay
 
-    /// <summary>Нижний бар: анимация точек + периодическая проверка rust/лога.</summary>
+
     private void StartStatusBar()
     {
         RefreshRustStatus();
@@ -406,19 +690,23 @@ public partial class MainWindow : Window
         _statusTimer.Tick += (_, _) =>
         {
             _statusTick++;
-            // Ловим старт парса в комбате (Run/Auto) — ready сразу уходит в работу
-            if (!_workStarted && _combatService.IsMonitoring)
+
+
+
+
+            var busy = IsBusy;
+            if (busy != _workStarted)
             {
-                _workStarted = true;
+                _workStarted = busy;
                 RefreshRustStatus();
             }
-            if (_statusTick % 25 == 0) RefreshRustStatus();   // раз в ~10 секунд
+            else if (_statusTick % 25 == 0) RefreshRustStatus();
 
             var dots = this.FindControl<TextBlock>("StatusDots");
-            if (dots == null || _rustMissing) return;   // rust не найден — анимация скрыта
+            if (dots == null || _rustMissing) return;
             if (_workStarted && _targetOk)
             {
-                // Работаем: точки появляются и пропадают, строка всегда 3 символа.
+
                 dots.Text = (_statusTick % 8) switch
                 {
                     1 => ".  ",
@@ -429,20 +717,183 @@ public partial class MainWindow : Window
                     6 => ".  ",
                     _ => "   "
                 };
+                return;
             }
-            else
-            {
-                // Простой: вместо точек милый смайл, символы меняются по кругу (тоже 3 символа).
-                dots.Text = (_statusTick % 4) switch
-                {
-                    0 => "^~^",
-                    1 => "^o^",
-                    2 => "^_^",
-                    _ => "^-^"
-                };
-            }
+
+            AnimateUpdateNotice(dots);
+            UpdateStatusHint();
         };
         _statusTimer.Start();
+    }
+
+
+
+    private string BuildStatusHint()
+    {
+        if (_rustMissing)
+            return "Rust was not found. Install the game or check the Steam library, then restart the app.";
+
+        var tip = _updateService.Stage switch
+        {
+            UpdateStage.Downloading =>
+                $"Downloading update v{_updateService.LatestVersion} — {_updateService.Progress}%. " +
+                "The installer is saved to %LocalAppData%\\VoidUI\\updates and is installed only after you confirm.",
+            UpdateStage.Downloaded when !_doneExpired =>
+                "Update is downloaded and waiting. Install it from Settings → Updates; the app will restart.",
+            UpdateStage.Available =>
+                "Idle. A newer version is on GitHub — open Settings → Updates to download it.",
+            _ => ""
+        };
+
+        if (!string.IsNullOrEmpty(tip)) return tip;
+
+        return _workStarted
+            ? _targetOk
+                ? $"Processing {ActiveWorkFile} from the Rust folder right now."
+                : $"Waiting for {ActiveWorkFile} — the game has not created it yet."
+            : "Idle. Nothing is being processed; the tracker reads the log only while parsing runs.";
+    }
+
+
+    private void UpdateStatusHint()
+    {
+        var hint = this.FindControl<Border>("StatusHint");
+        if (hint is not { IsVisible: true }) return;
+
+        var text = this.FindControl<TextBlock>("StatusHintText");
+        if (text != null) text.Text = BuildStatusHint();
+    }
+
+
+    private void WireStatusHint()
+    {
+        var left = this.FindControl<StackPanel>("StatusLeft");
+        var hint = this.FindControl<Border>("StatusHint");
+        if (left == null || hint == null) return;
+
+        left.PointerEntered += (_, _) =>
+        {
+            var text = this.FindControl<TextBlock>("StatusHintText");
+            if (text != null) text.Text = BuildStatusHint();
+            hint.IsVisible = true;
+        };
+        left.PointerExited += (_, _) => hint.IsVisible = false;
+    }
+
+
+    private static string IdleDots(int tick) => (tick % 4) switch
+    {
+        0 => "^~^",
+        1 => "^o^",
+        2 => "^_^",
+        _ => "^-^"
+    };
+
+
+
+    private static string ReadyShrink(int tick)
+    {
+        var frames = new[] { "ready", "read", "rea", "re", "r", "i", "i" };
+        return frames[(tick / 3) % frames.Length].PadLeft(5);
+    }
+
+
+    private static string NoticeDots(int tick) => ((tick / 4) % 7) switch
+    {
+        0 => ">~<",
+        1 => ">o<",
+        2 => "._.",
+        3 => "^~^",
+        4 => "^o^",
+        5 => "^_^",
+        _ => "^-^"
+    };
+
+
+    private static string QuestionDots(int tick) => ((tick / 3) % 3) switch
+    {
+        0 => "?? ",
+        1 => "???",
+        _ => "?  "
+    };
+
+    private static Color HsvToRgb(double h, double s, double v)
+    {
+        var c = v * s;
+        var x = c * (1 - Math.Abs(h / 60 % 2 - 1));
+        var m = v - c;
+        double r, g, b;
+        if (h < 60) { r = c; g = x; b = 0; }
+        else if (h < 120) { r = x; g = c; b = 0; }
+        else if (h < 180) { r = 0; g = c; b = x; }
+        else if (h < 240) { r = 0; g = x; b = c; }
+        else if (h < 300) { r = x; g = 0; b = c; }
+        else { r = c; g = 0; b = x; }
+        return Color.FromRgb((byte)((r + m) * 255), (byte)((g + m) * 255), (byte)((b + m) * 255));
+    }
+
+
+
+    private void AnimateUpdateNotice(TextBlock dots)
+    {
+        var fileLabel = this.FindControl<TextBlock>("StatusFileLabel");
+        var fileDot = this.FindControl<Border>("StatusFileDot");
+        var stage = _updateService.Stage;
+
+
+        if (stage != UpdateStage.Downloaded) { _doneTicks = 0; _doneExpired = false; }
+
+        switch (stage)
+        {
+            case UpdateStage.Available:
+
+
+                dots.Text = NoticeDots(_statusTick);
+                if (fileLabel != null)
+                {
+                    fileLabel.Text = "ready";
+                    fileLabel.IsVisible = true;
+                }
+                return;
+
+            case UpdateStage.Downloading:
+
+                if (fileDot != null)
+                    fileDot.Background = new SolidColorBrush(HsvToRgb((_statusTick * 7) % 360, 0.7, 0.95));
+                if (fileLabel != null)
+                {
+                    fileLabel.Text = $"downloading {_updateService.Progress}%";
+                    fileLabel.IsVisible = true;
+                }
+                dots.Text = QuestionDots(_statusTick);
+                return;
+
+            case UpdateStage.Downloaded when !_doneExpired:
+
+                if (string.IsNullOrEmpty(_doneCaption))
+                    _doneCaption = new Random().Next(2) == 0 ? "how do I look っˆڡˆς" : "i well ripe っˆڡˆς";
+
+                _doneTicks++;
+                if (_doneTicks > 150) _doneExpired = true;
+                else
+                {
+                    var blink = (_doneTicks / 3) % 2 == 0;
+                    if (fileLabel != null)
+                    {
+                        // Подпись со смайликом длиннее фиксированной ширины — снимаем её,
+                        // иначе строка обрезается и статус под ней не виден.
+                        fileLabel.Width = double.NaN;
+                        fileLabel.Text = blink ? _doneCaption : "ready";
+                        fileLabel.IsVisible = true;
+                    }
+                    if (fileDot != null)
+                        fileDot.Background = new SolidColorBrush(Color.Parse(blink ? "#34d399" : "#facc15"));
+                    dots.Text = QuestionDots(_statusTick);
+                }
+                return;
+        }
+
+        dots.Text = IdleDots(_statusTick);
     }
 
     private void RefreshRustStatus()
@@ -456,7 +907,7 @@ public partial class MainWindow : Window
             if (!found) _rustPathExpanded = false;
             _rustMissing = !found;
 
-            // Центр прячем, когда раста нет: сообщение живёт слева, без дублей.
+
             var rustText = this.FindControl<TextBlock>("RustStatusText");
             if (rustText != null)
             {
@@ -472,9 +923,9 @@ public partial class MainWindow : Window
                 rustDot.Background = new SolidColorBrush(Color.Parse("#22c55e"));
             }
 
-            // Файл, над которым идёт работа: показываем как есть (в т.ч. .txt),
-            // а существование проверяем по реальному файлу игры (.cfg в папке cfg).
-            string? relReal = _workingFile switch
+
+
+            string? relReal = ActiveWorkFile switch
             {
                 "cfg/keys.txt" => "cfg/keys.cfg",
                 "cfg/client.txt" => "cfg/client.cfg",
@@ -492,7 +943,7 @@ public partial class MainWindow : Window
 
             if (!found)
             {
-                // Rust не найден: только красный кружок и эта строка — и больше ничего.
+
                 if (fileLabel != null)
                 {
                     fileLabel.Text = "rust dont found :(";
@@ -512,7 +963,7 @@ public partial class MainWindow : Window
             }
             else if (!_workStarted)
             {
-                // Ещё ничего не начато: ready — жёлтый кружок и смайл, файла пока нет.
+
                 if (fileLabel != null)
                 {
                     fileLabel.Text = "ready";
@@ -523,7 +974,7 @@ public partial class MainWindow : Window
                     fileDot.Background = new SolidColorBrush(Color.Parse("#facc15"));
                     fileDot.IsVisible = true;
                 }
-                if (dotsUi != null) dotsUi.IsVisible = true;   // здесь крутится ^~^
+                if (dotsUi != null) dotsUi.IsVisible = true;
                 if (filePath != null)
                 {
                     filePath.IsVisible = false;
@@ -539,7 +990,7 @@ public partial class MainWindow : Window
                 }
                 if (fileDot != null)
                 {
-                    // зелёный — работаем; жёлтый — простой (файла нет)
+
                     fileDot.Background = new SolidColorBrush(Color.Parse(_targetOk ? "#22c55e" : "#facc15"));
                     fileDot.IsVisible = true;
                 }
@@ -547,7 +998,7 @@ public partial class MainWindow : Window
                 if (filePath != null)
                 {
                     filePath.IsVisible = true;
-                    filePath.Text = $"with {_workingFile} on rust directory";
+                    filePath.Text = $"with {ActiveWorkFile} on rust directory";
                 }
             }
         }
@@ -555,9 +1006,9 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Путь в виде ..../..../..../Rust/output_log.txt:
-    /// родительские папки заменяются группами точек (максимум 3),
-    /// а хвост — папка игры и файл — остаётся настоящим.
+
+
+
     /// </summary>
     private static string AbbrevPath(string? path)
     {
@@ -565,7 +1016,7 @@ public partial class MainWindow : Window
         var segs = path.Split(new[] { '\\', '/' }, StringSplitOptions.RemoveEmptyEntries);
         if (segs.Length == 0) return path;
 
-        // отрезаем от папки игры (Rust), иначе — последние два сегмента
+
         int keepFrom = -1;
         for (int i = segs.Length - 1; i >= 0; i--)
             if (segs[i].Equals("rust", StringComparison.OrdinalIgnoreCase)) { keepFrom = i; break; }
@@ -585,15 +1036,31 @@ public partial class MainWindow : Window
         return sb.ToString();
     }
 
-    /// <summary>Переключает файл, над которым работаем (вызывается при смене страницы).</summary>
+
+
+
+    private bool IsBusy => _trackerService.IsMonitoring || _cfgBusyFile != null;
+
+
+    private string ActiveWorkFile => _cfgBusyFile ?? _workingFile;
+
+
+
+    public void SetConfigBusy(string? file)
+    {
+        _cfgBusyFile = file;
+        RefreshRustStatus();
+    }
+
+
     private void SetWorkingFile(string file)
     {
         if (_workingFile != file) _rustPathExpanded = false;
         _workingFile = file;
-        RefreshRustStatus();   // обновляем всегда: мог сработать триггер ready → работа
+        RefreshRustStatus();
     }
 
-    /// <summary>Клик по rust-статусу: ..../..../Rust ⇄ полный путь.</summary>
+
     private void OnRustStatusClick(object? sender, PointerPressedEventArgs e)
     {
         if (string.IsNullOrEmpty(_rustFullPath)) return;

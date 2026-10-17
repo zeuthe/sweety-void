@@ -14,8 +14,17 @@
                             <Button Classes="pill" Name="StartOverlayBtn" Content="Start" MinWidth="50" Height="28" FontSize="11"/>
                             <Button Classes="pill" Name="StopOverlayBtn" Content="Stop" MinWidth="50" Height="28" FontSize="11"/>
                             <Button Classes="pill" Name="ResetBtn" Content="Reset" MinWidth="50" Height="28" FontSize="11"/>
+                            <Button Classes="pill" Name="PreviewEyeBtn" MinWidth="34" Height="28" Padding="6,0"
+                                    ToolTip.Tip="Show / hide preview"
+                                    AutomationProperties.Name="PreviewEye">
+                                <Button.Content>
+                                    <Path Name="PreviewEyeIcon" Width="16" Height="16" Stretch="Uniform"
+                                          Fill="{StaticResource TextSecondary}"
+                                          Data="M12 5C6.5 5 2.4 8.6 1 12c1.4 3.4 5.5 7 11 7s9.6-3.6 11-7c-1.4-3.4-5.5-7-11-7zm0 11.5a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9zM12 9.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z"/>
+                                </Button.Content>
+                            </Button>
                         </StackPanel>
-                        <Border Background="{StaticResource SurfaceBase}" CornerRadius="10" Width="300" Height="300"
+                        <Border Name="PreviewBox" Background="{StaticResource SurfaceBase}" CornerRadius="10" Width="300" Height="300"
                                 HorizontalAlignment="Center" ClipToBounds="True"
                                 BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1">
                             <Canvas Name="CrosshairCanvas" Background="Transparent" Width="300" Height="300"/>
@@ -70,6 +79,26 @@
                             <Button Classes="pill" Name="RainbowToggleBtn" Content="Rainbow" MinWidth="60" Height="24" FontSize="10"/>
                         </StackPanel>
                         <WrapPanel Name="ColorGroup"/>
+                        <StackPanel Name="PaletteGroup" Spacing="8">
+                            <TextBlock Name="PickerHint" Text="PICK" Classes="section-header"/>
+                            <Border Name="PickerSvArea" Height="130" CornerRadius="6" Cursor="Cross">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0%,50%" EndPoint="100%,50%">
+                                        <GradientStop Color="#ffffffff" Offset="0"/>
+                                        <GradientStop Color="#ff0000ff" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                                <Panel>
+                                    <Border Name="PickerSvOverlay"/>
+                                    <Canvas Name="PickerCanvas">
+                                        <Border Name="PickerDot" Width="14" Height="14" CornerRadius="7"
+                                                BorderBrush="#ffffffff" BorderThickness="2" Background="#00000000"
+                                                Canvas.Left="-7" Canvas.Top="-7"/>
+                                    </Canvas>
+                                </Panel>
+                            </Border>
+                            <Border Name="PickerHueBar" Height="16" CornerRadius="4" Cursor="Hand"/>
+                        </StackPanel>
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <TextBlock Text="Custom" Foreground="{StaticResource TextSecondary}" FontSize="11" VerticalAlignment="Center" Width="60"/>
                             <TextBox Name="CustomColorInput" Text="#22c55e" MinWidth="60" MaxWidth="80" FontSize="11" HorizontalContentAlignment="Center"/>
@@ -147,6 +176,7 @@
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <TextBlock Text="Overlay Bind" Foreground="{StaticResource TextSecondary}" FontSize="11" VerticalAlignment="Center" Width="80"/>
                             <Button Classes="pill" Name="BindInput" Content="F6" MinWidth="50" Height="28" FontSize="11"/>
+                            <Button Classes="pill" Name="BindSetBtn" Content="Set" MinWidth="40" Height="28" FontSize="11" ToolTip.Tip="Capture a key combo"/>
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <TextBlock Text="Position X" Foreground="{StaticResource TextSecondary}" FontSize="11" VerticalAlignment="Center" Width="80"/>

@@ -1,0 +1,292 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="VoidUI.Views.TrackerPage">
+    <Grid RowDefinitions="*,Auto">
+
+        <!-- Content -->
+        <Border Grid.Row="0" Background="Transparent">
+            <Grid ColumnDefinitions="*,320">
+                <!-- Left column, split in half:
+                     top    = who killed me ("track my deaths")
+                     bottom = combat log    ("track my combat log") -->
+                <Border Grid.Column="0" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="0,0,1,0" Padding="0">
+                    <Grid Name="SplitGrid" RowDefinitions="Auto,*,Auto,*">
+
+                        <TextBox Name="TrackerFilter" Grid.Row="0" Watermark="Filter servers / players..."
+                                 Background="{StaticResource SurfaceLow}" BorderBrush="{StaticResource BorderSubtle}"
+                                 BorderThickness="0,0,0,1" CornerRadius="0" Padding="14,0" Height="36"
+                                 Foreground="{StaticResource TextPrimary}" FontSize="12"/>
+
+                        <!-- Top half: who killed me -->
+                        <Grid Grid.Row="1" RowDefinitions="Auto,*">
+                            <Border Grid.Row="0" Padding="16,7" BorderBrush="{StaticResource BorderSubtle}"
+                                    BorderThickness="0,0,0,1" Background="{StaticResource SurfaceBase}">
+                                <Grid ColumnDefinitions="*,Auto,Auto">
+                                    <TextBlock Grid.Column="0" Text="WHO KILLED ME" FontSize="10" FontWeight="700"
+                                               Foreground="{StaticResource TextTertiary}" VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="1" Text="track my deaths" FontSize="10" FontStyle="Italic"
+                                               Foreground="{StaticResource TextTertiary}" VerticalAlignment="Center"
+                                               Margin="10,0,0,0"/>
+                                    <Button Grid.Column="2" Classes="collapse" Name="KillMeCollapseBtn" Content="▲"
+                                            ToolTip.Tip="Collapse this panel — the space goes to combat log"/>
+                                </Grid>
+                            </Border>
+                            <ScrollViewer Grid.Row="1">
+                                <StackPanel Name="ServersPanel" Spacing="0"/>
+                            </ScrollViewer>
+                        </Grid>
+
+                        
+                        <Border Grid.Row="2" Name="SplitHandle" Height="6" Background="Transparent"
+                                VerticalAlignment="Center" Cursor="SizeNorthSouth"
+                                ToolTip.Tip="Drag to resize the panels">
+                            <Border Width="40" Height="1" Background="{StaticResource BorderStrong}"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+
+                        <!-- Bottom half: combat log (F1 console: combatlog) -->
+                        <Grid Grid.Row="3" RowDefinitions="Auto,*">
+                            <Border Grid.Row="0" Padding="16,7" BorderBrush="{StaticResource BorderSubtle}"
+                                    BorderThickness="0,0,0,1" Background="{StaticResource SurfaceBase}">
+                                <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+                                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="0">
+                                        <TextBlock Text="COMBAT LOG" FontSize="10" FontWeight="700"
+                                                   Foreground="{StaticResource TextTertiary}" VerticalAlignment="Center"/>
+                                        <Border Classes="new-badge"><TextBlock Text="NEW"/></Border>
+                                    </StackPanel>
+                                    <TextBlock Grid.Column="1" Text="track my combat log" FontSize="10" FontStyle="Italic"
+                                               Foreground="{StaticResource TextTertiary}" VerticalAlignment="Center"
+                                               Margin="10,0,6,0"/>
+                                    <!-- Warning: combatlog has to be enabled in the console first -->
+                                    <Border Grid.Column="2" Name="CombatLogHint" Width="16" Height="16" CornerRadius="8"
+                                            Background="#f59e0b2e" BorderBrush="#f59e0b" BorderThickness="1"
+                                            VerticalAlignment="Center" Cursor="Hand"
+                                            ToolTip.Tip="Type combatlog in the console (F1) — the decoding of the events will appear here.">
+                                        <TextBlock Text="!" FontSize="10" FontWeight="700" Foreground="#f59e0b"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-1,0,0"/>
+                                    </Border>
+                                    <Button Grid.Column="3" Classes="collapse" Name="CombatLogCollapseBtn" Content="▼"
+                                            ToolTip.Tip="Collapse this panel — the space goes to who killed me"/>
+                                </Grid>
+                            </Border>
+                            <ScrollViewer Grid.Row="1" Name="CombatLogScroll">
+                                <TextBlock Name="CombatLogText" FontFamily="Cascadia Code, Consolas, monospace"
+                                           FontSize="10" Foreground="{StaticResource TextSecondary}"
+                                           TextWrapping="NoWrap" Margin="14,8"
+                                           Text="combatlog events will be decoded here"/>
+                            </ScrollViewer>
+                        </Grid>
+                    </Grid>
+                </Border>
+                <!-- Log -->
+                <ScrollViewer Grid.Column="1" Name="LogScroll">
+                    <TextBlock Name="LogText" FontFamily="Cascadia Code, Consolas, monospace" FontSize="11"
+                               Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap" Margin="16,12"
+                               Text="[TRACKER] Waiting for events..."/>
+                </ScrollViewer>
+            </Grid>
+        </Border>
+
+        <!-- Bottom bar -->
+        <Border Grid.Row="1" Background="{StaticResource SurfaceBase}" BorderBrush="{StaticResource BorderSubtle}"
+                BorderThickness="0,1,0,0" Padding="16,6">
+            <Grid RowDefinitions="Auto,Auto">
+                <Grid Grid.Row="0" ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,*,Auto,Auto">
+
+                
+                <StackPanel Grid.Column="0" Orientation="Vertical" VerticalAlignment="Center" Margin="0,0,10,0">
+                    <Button Classes="run" Name="RunParseBtn" Content="RUN"
+                            ToolTip.Tip="Start parsing with the selected mode. Press again to stop."/>
+                    <Button Classes="run-arrow" Name="ParseMenuBtn" Content="▼"
+                            ToolTip.Tip="Choose parse mode"/>
+                </StackPanel>
+
+                
+
+                
+                <StackPanel Grid.Column="2" Name="IntervalPanel" Orientation="Horizontal"
+                            Spacing="4" VerticalAlignment="Center" Margin="0,0,10,0" IsVisible="False"
+                            ToolTip.Tip="Delay between passes, plus or minus a random spread in seconds.">
+                    <StackPanel Spacing="1">
+                        <TextBox Classes="interval" Name="IntervalHoursBox" Text="0"/>
+                        <TextBlock Text="h" FontSize="9" HorizontalAlignment="Center"
+                                   Foreground="{StaticResource TextTertiary}"/>
+                    </StackPanel>
+                    <StackPanel Spacing="1">
+                        <TextBox Classes="interval" Name="IntervalMinutesBox" Text="0"/>
+                        <TextBlock Text="m" FontSize="9" HorizontalAlignment="Center"
+                                   Foreground="{StaticResource TextTertiary}"/>
+                    </StackPanel>
+                    <StackPanel Spacing="1">
+                        <TextBox Classes="interval" Name="IntervalSecondsBox" Text="30"/>
+                        <TextBlock Text="s" FontSize="9" HorizontalAlignment="Center"
+                                   Foreground="{StaticResource TextTertiary}"/>
+                    </StackPanel>
+                    <TextBlock Text="±" FontSize="11" Foreground="{StaticResource TextTertiary}"
+                               VerticalAlignment="Center" Margin="2,0,0,0"/>
+                    <StackPanel Spacing="1">
+                        <TextBox Classes="interval" Name="IntervalSpreadBox" Text="5"
+                                 ToolTip.Tip="Random spread around the interval, seconds."/>
+                        <TextBlock Text="s" FontSize="9" HorizontalAlignment="Center"
+                                   Foreground="{StaticResource TextTertiary}"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Status -->
+                <TextBlock Name="StatusText" Text="Idle" Foreground="{StaticResource TextTertiary}" FontSize="11"
+                           VerticalAlignment="Center" Margin="4,0,0,0" Grid.Column="3"/>
+
+                <!-- BattleMetrics -->
+                <Button Classes="pill" Name="OpenBMBtn" Content="BattleMetrics" Grid.Column="4" Height="24"
+                        Padding="12,0" FontSize="10" Margin="8,0,0,0"
+                        ToolTip.Tip="Open server tracking site"/>
+
+                <!-- Add custom site -->
+                <Button Classes="pill" Name="AddSiteBtn" Content="+" Grid.Column="5" Height="24" Width="28"
+                        Padding="0,0" FontSize="12" Margin="4,0,0,0"
+                        ToolTip.Tip="Add a custom tracking site"/>
+
+                <!-- Custom sites (with remove cross) -->
+                <ScrollViewer Grid.Column="6" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"
+                              Height="26" Margin="6,0,0,0">
+                    <StackPanel Name="CustomSitesBar" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center"/>
+                </ScrollViewer>
+
+                <!-- Clear Log -->
+                <Button Classes="ghost" Name="ClearLogBtn" Content="Clear" Grid.Column="7"/>
+
+                <!-- Export Log -->
+                <Button Classes="ghost" Name="ExportLogBtn" Content="Export" Grid.Column="8"/>
+                </Grid>
+
+                
+                <Border Grid.Row="1" Name="ParseMenu" Classes="parse-menu" Margin="0,6,0,0"
+                        HorizontalAlignment="Left"
+                        Background="{StaticResource SurfaceLow}" BorderBrush="{StaticResource BorderSubtle}"
+                        BorderThickness="1" CornerRadius="8" Padding="8,6" VerticalAlignment="Top">
+                    <StackPanel Orientation="Horizontal">
+                        <Button Classes="mode" Name="ModeOnceBtn" Content="Once"
+                                ToolTip.Tip="One-shot parse: reads the log once, then stops. No load, no risk."/>
+                        <Button Classes="mode" Name="ModeIntervalBtn" Content="Interval"
+                                ToolTip.Tip="Parses the log on a loop with a random interval. Constant disk/CPU load (&quot;microwave&quot;) and a potential ban risk."/>
+                        <Button Classes="mode" Name="ModePermanentBtn" Content="Permanent"
+                                ToolTip.Tip="Keeps parsing the log non-stop. Maximum load (&quot;microwave&quot;) and a potential ban risk."/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+
+    <!-- Bottom-bar controls -->
+    <UserControl.Styles>
+        <!-- Segmented parse-mode strip -->
+        <Style Selector="Button.mode">
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="Padding" Value="12,0"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="600"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderDefault}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
+            <Setter Property="Margin" Value="0,0,5,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style Selector="Button.mode:pointerover">
+            <Setter Property="Background" Value="{StaticResource SurfaceHigh}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderStrong}"/>
+            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+        </Style>
+        <Style Selector="Button.mode.active">
+            <Setter Property="Background" Value="{StaticResource AccentSubtle}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource AccentDefault}"/>
+            <Setter Property="Foreground" Value="{StaticResource AccentDefault}"/>
+        </Style>
+
+        <!-- Compact numeric fields of the interval editor -->
+        <Style Selector="TextBox.interval">
+            <Setter Property="Width" Value="34"/>
+            <Setter Property="Height" Value="22"/>
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="Padding" Value="2,0"/>
+            <Setter Property="TextAlignment" Value="Center"/>
+            <Setter Property="CornerRadius" Value="5"/>
+            <Setter Property="Background" Value="{StaticResource SurfaceLow}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderSubtle}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+            <Setter Property="CaretBrush" Value="{StaticResource TextPrimary}"/>
+            <Setter Property="SelectionBrush" Value="{StaticResource AccentDefault}"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+
+        
+        <Style Selector="Button.run">
+            <Setter Property="Height" Value="24"/>
+            <Setter Property="Padding" Value="16,0"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="700"/>
+            <Setter Property="CornerRadius" Value="{DynamicResource BtnCorner}"/>
+            <Setter Property="Background" Value="{StaticResource AccentDefault}"/>
+            <Setter Property="Foreground" Value="#ffffff"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style Selector="Button.run:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource AccentHover}"/>
+        </Style>
+
+        
+        <Style Selector="Button.run-arrow">
+            <Setter Property="Height" Value="18"/>
+            <Setter Property="Padding" Value="0,0"/>
+            <Setter Property="Margin" Value="0,2,0,0"/>
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="CornerRadius" Value="{DynamicResource BtnCorner}"/>
+            <Setter Property="Background" Value="{StaticResource SurfaceMid}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderDefault}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style Selector="Button.run-arrow:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource SurfaceHigh}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderStrong}"/>
+            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+        </Style>
+
+        
+        <Style Selector="Button.collapse">
+            <Setter Property="Width" Value="18"/>
+            <Setter Property="Height" Value="18"/>
+            <Setter Property="Padding" Value="0,0"/>
+            <Setter Property="Margin" Value="8,0,0,0"/>
+            <Setter Property="FontSize" Value="9"/>
+            <Setter Property="CornerRadius" Value="{DynamicResource BtnCorner}"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{StaticResource TextTertiary}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style Selector="Button.collapse:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource SurfaceHigh}"/>
+            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+        </Style>
+
+        
+        <Style Selector="Border.parse-menu">
+            <Setter Property="MaxHeight" Value="0"/>
+            <Setter Property="Opacity" Value="0"/>
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="MaxHeight" Duration="0:0:0.22"/>
+                    <DoubleTransition Property="Opacity" Duration="0:0:0.16"/>
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Border.parse-menu.open">
+            <Setter Property="MaxHeight" Value="46"/>
+            <Setter Property="Opacity" Value="1"/>
+        </Style>
+    </UserControl.Styles>
+</UserControl>

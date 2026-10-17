@@ -1,0 +1,125 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="VoidUI.Views.ThemeEditorWindow"
+        Width="720" Height="640"
+        MinWidth="560" MinHeight="480"
+        Title="Custom theme"
+        Background="{DynamicResource SurfaceBase}"
+        WindowStartupLocation="CenterOwner"
+        CanResize="True">
+
+    
+    <Window.Styles>
+        <Style Selector="Button:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent"/>
+        </Style>
+
+        <Style Selector="Button.action">
+            <Setter Property="Height" Value="34"/>
+            <Setter Property="Padding" Value="20,0"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="700"/>
+            <Setter Property="CornerRadius" Value="{DynamicResource BtnCorner}"/>
+            <Setter Property="Background" Value="{DynamicResource AccentDefault}"/>
+            <Setter Property="Foreground" Value="#ffffff"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style Selector="Button.action:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource AccentHover}"/>
+        </Style>
+
+        <Style Selector="Button.ghost">
+            <Setter Property="Height" Value="34"/>
+            <Setter Property="Padding" Value="16,0"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="600"/>
+            <Setter Property="CornerRadius" Value="{DynamicResource BtnCorner}"/>
+            <Setter Property="Background" Value="{DynamicResource BtnGhostBg}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderDefault}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondary}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style Selector="Button.ghost:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource BtnGhostBgHover}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderStrong}"/>
+        </Style>
+
+        <Style Selector="Button.pill">
+            <Setter Property="Height" Value="36"/>
+            <Setter Property="MinWidth" Value="64"/>
+            <Setter Property="Padding" Value="18,0"/>
+            <Setter Property="FontSize" Value="12.5"/>
+            <Setter Property="FontWeight" Value="600"/>
+            <Setter Property="CornerRadius" Value="{DynamicResource BtnCorner}"/>
+            <Setter Property="Background" Value="{DynamicResource BtnGlassBg}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BtnGlassBorder}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondary}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style Selector="Button.pill:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource BtnGlassHover}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderStrong}"/>
+        </Style>
+    </Window.Styles>
+
+    <ScrollViewer Background="Transparent">
+        <StackPanel Margin="22,18" Spacing="16">
+
+            <StackPanel Spacing="3">
+                <TextBlock Text="CUSTOM THEME" FontSize="18" FontWeight="800"
+                           Foreground="{DynamicResource TextPrimary}"/>
+                <TextBlock Text="Palette, font and button behaviour — applied to every window"
+                           FontSize="11" Foreground="{DynamicResource TextTertiary}"/>
+            </StackPanel>
+
+            <!-- Font -->
+            <Border Background="{DynamicResource SurfaceLow}" CornerRadius="10"
+                    BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="1" Padding="14">
+                <StackPanel Spacing="10">
+                    <TextBlock Text="FONT" FontSize="10" FontWeight="700"
+                               Foreground="{DynamicResource TextTertiary}"/>
+                    <ComboBox Name="FontCombo" MinWidth="260" HorizontalAlignment="Left" FontSize="12"/>
+                    <Border Background="{DynamicResource SurfaceMid}" CornerRadius="8" Padding="14,10">
+                        <TextBlock Name="FontPreview" Text="AaBbCc 0123 — quick brown fox"
+                                   FontSize="17" Foreground="{DynamicResource TextPrimary}"/>
+                    </Border>
+                </StackPanel>
+            </Border>
+
+            <!-- Button behaviour -->
+            <Border Background="{DynamicResource SurfaceLow}" CornerRadius="10"
+                    BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="1" Padding="14">
+                <StackPanel Spacing="10">
+                    <TextBlock Text="BUTTON BEHAVIOUR" FontSize="10" FontWeight="700"
+                               Foreground="{DynamicResource TextTertiary}"/>
+                    <ComboBox Name="ModeCombo" MinWidth="260" HorizontalAlignment="Left" FontSize="12"/>
+                    
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <Button Classes="action" Content="Action"/>
+                        <Button Classes="ghost" Content="Ghost"/>
+                        <Button Classes="pill" Content="Pill"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- Palette -->
+            <Border Background="{DynamicResource SurfaceLow}" CornerRadius="10"
+                    BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="1" Padding="14">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="PALETTE" FontSize="10" FontWeight="700"
+                               Foreground="{DynamicResource TextTertiary}"/>
+                    <StackPanel Name="PalettePanel" Spacing="4"/>
+                </StackPanel>
+            </Border>
+
+            <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right" Margin="0,4,0,8">
+                <Button Classes="ghost" Name="CancelBtn" Content="Cancel" MinWidth="92"/>
+                <Button Classes="action" Name="SaveBtn" Content="Save" MinWidth="92"/>
+            </StackPanel>
+
+        </StackPanel>
+    </ScrollViewer>
+</Window>

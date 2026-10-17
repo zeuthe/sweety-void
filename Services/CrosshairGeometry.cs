@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace VoidUI.Services
 {
-    /// <summary>Прямоугольник в DIP-координатах (центр прицела — точка вызова).</summary>
+
     public readonly struct Bar
     {
         public readonly double X, Y, W, H;
@@ -11,21 +11,21 @@ namespace VoidUI.Services
     }
 
     /// <summary>
-    /// Единственный источник геометрии и параметров анимаций прицела.
-    /// Превью (Avalonia) и оверлей (WPF) считают только отсюда — иначе
-    /// картинка на экране и в превью расходится. Все числа правятся здесь.
+
+
+
     /// </summary>
     public static class CrosshairGeometry
     {
-        // ---------- пропорции ----------
-        /// <summary>Скобка занимает по Size/2 в каждую сторону (ширина = Size).</summary>
+
+
         public const double BracketScale = 0.5;
-        /// <summary>Длина плеча скобки от её размера.</summary>
+
         public const double BracketArmScale = 0.7;
-        /// <summary>Кегль символа от Size.</summary>
+
         public const double SymbolFontScale = 2.5;
 
-        // ---------- базовые размеры ----------
+
         public static double Thickness(double t) => Math.Max(t, 1.0);
         public static double CrossLength(double size, double t) => Math.Max(size * 2.0, Thickness(t));
         public static double CircleDiameter(double size) => size * 2.0;
@@ -35,7 +35,7 @@ namespace VoidUI.Services
         public static double BracketArm(double size, double t) =>
             Math.Max(BracketHalf(size) * BracketArmScale, Thickness(t));
 
-        /// <summary>Полосы креста: 2 прямоугольника, центр (cx, cy).</summary>
+
         public static void CrossBars(double cx, double cy, double size, double t, List<Bar> dst)
         {
             double th = Thickness(t);
@@ -44,7 +44,7 @@ namespace VoidUI.Services
             dst.Add(new Bar(cx - th / 2.0, cy - len / 2.0, th, len));
         }
 
-        /// <summary>8 элементов скобки, центр (cx, cy).</summary>
+
         public static void BracketBars(double cx, double cy, double size, double t, List<Bar> dst)
         {
             double th = Thickness(t);
@@ -61,35 +61,51 @@ namespace VoidUI.Services
             dst.Add(new Bar(cx + s - th,   cy + s - arm,      th,  arm));
         }
 
-        // ---------- анимации: длительности (сек) ----------
+
         public static double AnimDuration(double speed) => 10.0 / Math.Max(speed, 1.0);      // pulse, glow
         public const double ScaleDuration = 1.5;                                             // scale
         public static double SpinDuration(double spinSpeed) => 10.0 / Math.Max(spinSpeed, 1.0);
         public static double OrbitDuration(double orbitSpeed) => 10.0 / Math.Max(orbitSpeed, 1.0);
         public static double RainbowCycleDuration(double rainbowSpeed) => 3.0 / Math.Max(rainbowSpeed, 1.0);
 
-        // ---------- амплитуды (одинаковые для превью и сторибордов оверлея) ----------
-        public const double PulseFrom = 1.0, PulseTo = 1.15;
+
+        public const double PulseFrom = 1.0, PulseTo = 1.35;
         public const double ScaleFrom = 1.0, ScaleTo = 1.5;
-        public const double GlowDim = 0.7;
+
+
+
+
+
+
+
+        public const double GlowHaloMin = 0.25, GlowHaloMax = 1.0;
+
+        public static readonly (double Scale, double Opacity)[] GlowRings =
+        {
+            (2.7, 0.09),
+            (2.1, 0.16),
+            (1.6, 0.28),
+            (1.25, 0.45),
+        };
 
         /// <summary>
-        /// Треугольная волна 0→1→0 с полным циклом 2*duration —
-        /// ровно то, что рисует WPF DoubleAnimation(AutoReverse, linear).
+
+
+
         /// </summary>
-        public static double Triangle(double t, double duration)
+        public static double SmoothWave(double t, double duration)
         {
             if (duration <= 0) return 0;
             double cycle = duration * 2.0;
             double p = t % cycle;
             if (p < 0) p += cycle;
-            double half = p / duration;          // 0..2
-            return half <= 1.0 ? half : 2.0 - half;
+            double phase = p <= duration ? p : cycle - p;
+            return 0.5 - 0.5 * Math.Cos(Math.PI * phase / duration);
         }
 
-        /// <summary>Цвет палитры в момент t: между ключами — линейная интерполяция,
-        /// после последнего ключа цвет держится (как ColorAnimationUsingKeyFrames).
-        /// paletteRgb — уплощённые R,G,B компоненты (count*3 байта).</summary>
+
+
+
         public static void PaletteColor(byte[] paletteRgb, int count, double t, double cycleDur, out byte r, out byte g, out byte b)
         {
             r = g = b = 255;

@@ -1,5 +1,7 @@
 # Builds "Sweety Void Setup.exe":
-#   1. publishes the app as a self-contained single-file exe
+#   1. publishes the app self-contained, WITHOUT single-file bundling (#20):
+#      VoidUI.exe stays a thin launcher and all code lands in VoidUI.dll +
+#      dependency DLLs, so an update can replace or drop assemblies
 #   2. packs the publish output into payload.zip
 #   3. builds the Avalonia installer with the payload embedded
 #
@@ -8,7 +10,9 @@
 
 param(
     [string]$Configuration = "Release",
-    [switch]$SkipApp
+    [switch]$SkipApp,
+    [string]$Version = "",
+    [switch]$NoBump
 )
 
 $ErrorActionPreference = "Stop"
@@ -21,11 +25,34 @@ $insOut = Join-Path $temp "voidui-setup-out"
 
 Write-Host "== Sweety Void installer build ==" -ForegroundColor Cyan
 
+# --- Версия (#14: её же сравнивает автообновление с GitHub) ---
+# По умолчанию patch-бамп сам: 1.0.0 -> 1.0.1. Явно: -Version 1.1.0.
+# Оставить как есть: -NoBump (например, при пересборке того же релиза).
+$asmPath = Join-Path $root "Properties\AssemblyInfo.cs"
+$asmText = [System.IO.File]::ReadAllText($asmPath)
+$vm = [regex]::Match($asmText, 'AssemblyInformationalVersion\("(\d+)\.(\d+)\.(\d+)"\)')
+if (-not $vm.Success) { throw "AssemblyInfo.cs: version string not found" }
+
+if (-not $NoBump) {
+    if ([string]::IsNullOrWhiteSpace($Version)) {
+        $Version = "{0}.{1}.{2}" -f [int]$vm.Groups[1].Value, [int]$vm.Groups[2].Value, ([int]$vm.Groups[3].Value + 1)
+    }
+    $asmText = [regex]::Replace($asmText, 'AssemblyVersion\("[^"]*"\)',        ('AssemblyVersion("' + $Version + '.0")'))
+    $asmText = [regex]::Replace($asmText, 'AssemblyFileVersion\("[^"]*"\)',    ('AssemblyFileVersion("' + $Version + '.0")'))
+    $asmText = [regex]::Replace($asmText, 'AssemblyInformationalVersion\("[^"]*"\)', ('AssemblyInformationalVersion("' + $Version + '")'))
+    [System.IO.File]::WriteAllText($asmPath, $asmText, (New-Object System.Text.UTF8Encoding($true)))
+}
+elseif ([string]::IsNullOrWhiteSpace($Version)) {
+    # -NoBump keeps AssemblyInfo.cs as is, but the installer still needs the number.
+    $Version = "{0}.{1}.{2}" -f [int]$vm.Groups[1].Value, [int]$vm.Groups[2].Value, [int]$vm.Groups[3].Value
+}
+Write-Host ("    version: " + $Version) -ForegroundColor Green
+
 Get-Process -Name "VoidUI", "VoidUI.Setup" -ErrorAction SilentlyContinue | Stop-Process -Force
 Start-Sleep -Milliseconds 500
 
 if (-not $SkipApp) {
-    Write-Host "[1/3] Publishing app (self-contained single-file)..." -ForegroundColor Yellow
+    Write-Host "[1/3] Publishing app (self-contained, code split into DLLs)..." -ForegroundColor Yellow
     if (Test-Path $appPub) { Remove-Item $appPub -Recurse -Force }
     # The app's obj is relocated to C: for this build (see -p:BaseIntermediateOutputPath).
     # Remove the stale obj at the default location, otherwise its generated *.g.cs files
@@ -39,11 +66,12 @@ if (-not $SkipApp) {
     if (Test-Path $staleRid) { Remove-Item $staleRid -Recurse -Force -ErrorAction SilentlyContinue }
     $tempBin = Join-Path $temp "voidui-app-bin"
     if (Test-Path $tempBin) { Remove-Item $tempBin -Recurse -Force -ErrorAction SilentlyContinue }
+    # PublishSingleFile=false (#20): код остаётся в отдельных DLL, exe только запускает.
+    # Так обновление может заменять или удалять ассемблей, а частичный патч одного
+    # большого файла дал бы смешанную сборку.
     dotnet publish (Join-Path $root "VoidUI.csproj") `
         -c $Configuration -r win-x64 --self-contained true `
-        -p:PublishSingleFile=true `
-        -p:IncludeNativeLibrariesForSelfExtract=true `
-        -p:EnableCompressionInSingleFile=true `
+        -p:PublishSingleFile=false `
         -p:DebugType=none `
         -p:BaseIntermediateOutputPath="$temp\voidui-app-obj\" `
         -p:OutputPath="$temp\voidui-app-bin\" `
@@ -72,6 +100,7 @@ dotnet publish (Join-Path $root "Installer\VoidUI.Installer.csproj") `
     -p:IncludeNativeLibrariesForSelfExtract=true `
     -p:EnableCompressionInSingleFile=true `
     -p:PayloadZip="$payload" `
+    -p:Version="$Version" `
     -o $insOut
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish (installer) failed" }
 

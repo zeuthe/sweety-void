@@ -38,6 +38,9 @@ internal static class Program
         bool noDesktop = args.Any(a => string.Equals(a, "--no-desktop", StringComparison.OrdinalIgnoreCase));
         bool noStartMenu = args.Any(a => string.Equals(a, "--no-startmenu", StringComparison.OrdinalIgnoreCase));
         bool noPin = args.Any(a => string.Equals(a, "--no-pin", StringComparison.OrdinalIgnoreCase));
+        bool noTracker = args.Any(a => string.Equals(a, "--no-tracker", StringComparison.OrdinalIgnoreCase));
+        bool noGraphics = args.Any(a => string.Equals(a, "--no-graphics", StringComparison.OrdinalIgnoreCase));
+        bool noBinds = args.Any(a => string.Equals(a, "--no-binds", StringComparison.OrdinalIgnoreCase));
         bool launch = args.Any(a => string.Equals(a, "--launch", StringComparison.OrdinalIgnoreCase));
 
         string? dir = ReadArg(args, "--dir");
@@ -51,7 +54,8 @@ internal static class Program
             await InstallService.UninstallAsync(target, removeData, progress, CancellationToken.None);
         else
             await InstallService.InstallAsync(
-                new InstallOptions(target, !noDesktop, !noStartMenu, !noPin), progress, CancellationToken.None);
+                new InstallOptions(target, !noDesktop, !noStartMenu, !noPin,
+                    !noTracker, !noGraphics, !noBinds), progress, CancellationToken.None);
 
         if (launch) InstallService.LaunchApp(target);
 

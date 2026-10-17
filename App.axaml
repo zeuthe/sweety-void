@@ -4,9 +4,46 @@
              RequestedThemeVariant="Dark">
     <Application.Styles>
         <FluentTheme />
+
+        
+        <Style Selector="TemplatedControl">
+            <Setter Property="FontFamily" Value="{DynamicResource AppFontFamily}" />
+        </Style>
+        <Style Selector="TextBlock">
+            <Setter Property="FontFamily" Value="{DynamicResource AppFontFamily}" />
+        </Style>
+        <Style Selector="Window">
+            <Setter Property="FontFamily" Value="{DynamicResource AppFontFamily}" />
+        </Style>
     </Application.Styles>
     <Application.Resources>
         <ResourceDictionary>
+            
+            <FontFamily x:Key="AppFontFamily">Consolas, Cascadia Mono, Courier New, monospace</FontFamily>
+            <CornerRadius x:Key="BtnCorner">0</CornerRadius>
+
+            <SolidColorBrush x:Key="BtnFace">#17171a</SolidColorBrush>
+            <SolidColorBrush x:Key="BtnFaceHover">#26262b</SolidColorBrush>
+            <SolidColorBrush x:Key="BtnFacePressed">#0b0b0d</SolidColorBrush>
+
+            <SolidColorBrush x:Key="BtnEdge">#3d3d44</SolidColorBrush>
+            <SolidColorBrush x:Key="BtnEdgeHover">#7a7a86</SolidColorBrush>
+
+            
+            <SolidColorBrush x:Key="AccentEdge">#40000000</SolidColorBrush>
+
+            <SolidColorBrush x:Key="BtnGhostBg">#17171a</SolidColorBrush>
+            <SolidColorBrush x:Key="BtnGhostBgHover">#26262b</SolidColorBrush>
+
+            
+            <StaticResource x:Key="BtnBg" ResourceKey="BtnFace"/>
+            <StaticResource x:Key="BtnBgHover" ResourceKey="BtnFaceHover"/>
+            <StaticResource x:Key="BtnBgPressed" ResourceKey="BtnFacePressed"/>
+            <StaticResource x:Key="BtnBorder" ResourceKey="BtnEdge"/>
+            <StaticResource x:Key="BtnBorderHover" ResourceKey="BtnEdgeHover"/>
+            <StaticResource x:Key="BtnGlassBg" ResourceKey="BtnFace"/>
+            <StaticResource x:Key="BtnGlassHover" ResourceKey="BtnFaceHover"/>
+            <StaticResource x:Key="BtnGlassBorder" ResourceKey="BtnEdge"/>
             <ResourceDictionary.MergedDictionaries>
                 <ResourceInclude Source="avares://VoidUI/Themes/Theme.axaml"/>
             </ResourceDictionary.MergedDictionaries>

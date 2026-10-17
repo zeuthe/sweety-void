@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using VoidUI.Models;
 
 namespace VoidUI.Services
@@ -29,6 +30,7 @@ namespace VoidUI.Services
                 {
                     var json = File.ReadAllText(_settingsPath);
                     _settings = JsonConvert.DeserializeObject<AppSettings>(json) ?? new AppSettings();
+                    MigrateLegacySectionName(json);
                 }
                 catch { _settings = new AppSettings(); }
             }
@@ -39,11 +41,58 @@ namespace VoidUI.Services
             return _settings;
         }
 
+
+
+        private void MigrateLegacySectionName(string json)
+        {
+            if (_settings.Tracker != null && _settings.Tracker.CustomSites.Count > 0) return;
+
+            try
+            {
+                var legacy = (JObject?)JObject.Parse(json)["Combat"];
+                var tracker = legacy?.ToObject<TrackerSettings>();
+                if (tracker != null) _settings.Tracker = tracker;
+            }
+            catch {  }
+        }
+
+        private readonly object _saveLock = new();
+
         public void Save(AppSettings settings)
         {
-            _settings = settings;
-            var json = JsonConvert.SerializeObject(settings, Formatting.Indented);
-            File.WriteAllText(_settingsPath, json);
+            lock (_saveLock)
+            {
+                _settings = settings;
+                var json = JsonConvert.SerializeObject(settings, Formatting.Indented);
+
+
+
+
+
+                var tmp = _settingsPath + ".tmp";
+                for (int attempt = 0; ; attempt++)
+                {
+                    try
+                    {
+                        File.WriteAllText(tmp, json);
+                        if (File.Exists(_settingsPath))
+                            File.Replace(tmp, _settingsPath, null, true);
+                        else
+                            File.Move(tmp, _settingsPath);
+                        return;
+                    }
+                    catch (Exception ex) when (attempt < 4 && ex is IOException or UnauthorizedAccessException)
+                    {
+                        System.Threading.Thread.Sleep(25);
+                    }
+                    catch (Exception ex)
+                    {
+                        try { File.Delete(tmp); } catch { }
+                        CrashLog.Write("Settings.Save", ex);
+                        return;
+                    }
+                }
+            }
         }
 
         public void SaveCrosshair(CrosshairState crosshair)

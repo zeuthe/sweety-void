@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
 using Avalonia.Input;
@@ -28,6 +29,8 @@ public partial class CrosshairPage : UserControl
     private string _selectedAnim = "none";
     private bool _spinEnabled;
     private bool _orbitEnabled;
+    private double _pickH, _pickS = 1, _pickV = 1;
+    private Avalonia.Media.LinearGradientBrush? _svBrush;
     private string _selectedColor = "#22c55e";
     private double _size = 16, _thickness = 3, _opacity = 100, _speed = 5, _rotation = 0, _posX = 0, _posY = 0;
     private double _spinSpeed = 5, _orbitRadius = 30, _orbitSpeed = 5;
@@ -61,12 +64,19 @@ public partial class CrosshairPage : UserControl
     private double _animPhase;
     private bool _suppressSliderEvents;
 
-    // Превью строится один раз при изменении настроек; кадры анимации двигают
-    // только трансформы/прозрачность/цвет — без пересборки визуального дерева.
+
+
+
+
+
+
     private Canvas? _previewShapes;
+    private Canvas? _previewHalo;
     private CrosshairState? _previewState;
-    private TransformGroup? _previewTg;
-    private RotateTransform? _previewRotate;
+    private TransformGroup? _previewOuterTg;
+    private TransformGroup? _previewInnerTg;
+    private RotateTransform? _previewOrbit;
+    private RotateTransform? _previewSpin;
     private ScaleTransform? _previewScale;
     private readonly List<SolidColorBrush> _previewBrushes = new();
     private byte[] _previewPaletteRgb = Array.Empty<byte>();
@@ -85,10 +95,18 @@ public partial class CrosshairPage : UserControl
     private void OnLoaded(object? sender, RoutedEventArgs e)
     {
         _canvas = this.FindControl<Canvas>("CrosshairCanvas");
-        // При смене вкладки страница выбрасывается, но DispatcherTimer держит её в памяти
-        // и крутит 60 FPS уже для чужого кадра — останавливаем таймер при выходе из дерева.
+
+
+
+        StartBindWatcher();
         AttachedToVisualTree += (_, _) => StartPreviewAnimation();
-        DetachedFromVisualTree += (_, _) => { _previewTimer?.Stop(); _previewTimer = null; };
+        DetachedFromVisualTree += (_, _) =>
+        {
+            _previewTimer?.Stop(); _previewTimer = null;
+
+
+            _bindTimer?.Stop(); _bindTimer = null;
+        };
         var ch = _settings.GetSettings().Crosshair ?? new CrosshairState();
         _selectedPreset = ch.Preset ?? "dot";
         _selectedAnim = ch.Animation ?? "none";
@@ -135,6 +153,7 @@ public partial class CrosshairPage : UserControl
         }
 
         SetupColorGroup();
+        SetupPaletteCard();
         SetupRainbowCard();
 
         SetupSlider("SizeSlider", "SizeValue", _size, v => { _size = v; ApplyLive(); }, "px");
@@ -161,7 +180,8 @@ public partial class CrosshairPage : UserControl
 
         SetupButton("StartOverlayBtn", () => _overlayDispatcher?.Invoke(() => _overlayWindow?.Show()));
         SetupButton("StopOverlayBtn", () => _overlayDispatcher?.Invoke(() => _overlayWindow?.Hide()));
-        SetupButton("ResetBtn", () => { ResetDefaults(); SyncAllControls(); ApplyLive(); });
+        SetupButton("ResetBtn", () => { ResetDefaults(); SyncAllControls(); ApplyLive(); SaveSettings(); ShowConfigStatus("Reset to defaults"); });
+        SetupButton("PreviewEyeBtn", TogglePreview);
         SetupButton("CenterAllBtn", () => { _posX = 0; _posY = 0; SyncSlider("PosXSlider", 0); SyncSlider("PosYSlider", 0); UpdatePosInputs(); SaveSettings(); ApplyLive(); });
         SetupButton("SaveCenterBtn", () => { _posX = 0; _posY = 0; SyncSlider("PosXSlider", 0); SyncSlider("PosYSlider", 0); UpdatePosInputs(); SaveSettings(); ApplyLive(); });
 
@@ -192,11 +212,10 @@ public partial class CrosshairPage : UserControl
         var bindInput = this.FindControl<Button>("BindInput");
         if (bindInput != null)
         {
-            var bindKeys = new[] { "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12" };
-            int bindIdx = Math.Max(0, Array.IndexOf(bindKeys, _bindKey));
             bindInput.Content = _bindKey;
-            bindInput.Click += (_, _) => { bindIdx = (bindIdx + 1) % bindKeys.Length; _bindKey = bindKeys[bindIdx]; bindInput.Content = _bindKey; ApplyLive(); };
+            bindInput.Click += async (_, _) => await ShowBindDialogAsync();
         }
+        SetupButton("BindSetBtn", async () => await ShowBindDialogAsync());
 
         var applyColorBtn = this.FindControl<Button>("ApplyColorBtn");
         if (applyColorBtn != null)
@@ -449,6 +468,262 @@ public partial class CrosshairPage : UserControl
         return await win.ShowDialog<bool>(owner);
     }
 
+    /// <summary>
+
+
+    /// </summary>
+    private async Task ShowBindDialogAsync()
+    {
+        var topLevel = TopLevel.GetTopLevel(this);
+        if (topLevel is not Window owner) return;
+
+        var win = new Window
+        {
+            Width = 360,
+            SizeToContent = SizeToContent.Height,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Background = Brushes.Transparent,
+            SystemDecorations = SystemDecorations.None,
+            CanResize = false,
+            ShowInTaskbar = false,
+            TransparencyLevelHint = new[] { WindowTransparencyLevel.Transparent }
+        };
+
+        var card = new Border
+        {
+            Background = new SolidColorBrush(Color.Parse("#16161c")),
+            BorderBrush = new SolidColorBrush(Color.Parse("#2a2a34")),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(14),
+            Padding = new Thickness(20),
+            BoxShadow = BoxShadows.Parse("0 12 32 0 #55000000")
+        };
+
+        var title = new TextBlock
+        {
+            Text = "Overlay bind",
+            Foreground = new SolidColorBrush(Color.Parse("#ededef")),
+            FontSize = 14,
+            FontWeight = FontWeight.SemiBold
+        };
+        var hint = new TextBlock
+        {
+            Text = "Press any key or combination (e.g. Ctrl + Shift + F6)",
+            Foreground = new SolidColorBrush(Color.Parse("#a5a5b0")),
+            FontSize = 11,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 6, 0, 0)
+        };
+
+
+        var display = new TextBlock
+        {
+            Text = _bindKey,
+            FontSize = 20,
+            FontWeight = FontWeight.SemiBold,
+            FontFamily = new FontFamily("Cascadia Code, Consolas, monospace"),
+            Foreground = new SolidColorBrush(Color.Parse("#7c5cfc")),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        var displayBox = new Border
+        {
+            Background = new SolidColorBrush(Color.Parse("#111114")),
+            BorderBrush = new SolidColorBrush(Color.Parse("#2a2a34")),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(10),
+            Height = 62,
+            Margin = new Thickness(0, 12, 0, 0),
+            Child = display,
+            Focusable = true
+        };
+
+
+        var manualBox = new TextBox
+        {
+            Text = _bindKey,
+            Watermark = "or type here: F6, Ctrl+F7...",
+            FontSize = 12,
+            Margin = new Thickness(0, 8, 0, 0),
+            HorizontalAlignment = HorizontalAlignment.Stretch
+        };
+
+        var saveBtn = new Button
+        {
+            Content = "Save",
+            Width = 100,
+            Height = 32,
+            Background = new SolidColorBrush(Color.Parse("#7c5cfc")),
+            Foreground = Brushes.White,
+            CornerRadius = new CornerRadius(9),
+            BorderThickness = new Thickness(0),
+            FontSize = 11,
+            FontWeight = FontWeight.SemiBold,
+            Cursor = new Cursor(StandardCursorType.Hand)
+        };
+        var cancelBtn = new Button
+        {
+            Content = "Cancel",
+            Width = 100,
+            Height = 32,
+            Background = new SolidColorBrush(Color.Parse("#1e1e26")),
+            Foreground = new SolidColorBrush(Color.Parse("#a5a5b0")),
+            CornerRadius = new CornerRadius(9),
+            BorderBrush = new SolidColorBrush(Color.Parse("#2a2a34")),
+            BorderThickness = new Thickness(1),
+            FontSize = 11,
+            FontWeight = FontWeight.SemiBold,
+            Cursor = new Cursor(StandardCursorType.Hand)
+        };
+
+        var btnRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 14, 0, 0) };
+        btnRow.Children.Add(cancelBtn);
+        btnRow.Children.Add(saveBtn);
+
+        var panel = new StackPanel { Spacing = 4 };
+        panel.Children.Add(title);
+        panel.Children.Add(hint);
+        panel.Children.Add(displayBox);
+        panel.Children.Add(manualBox);
+        panel.Children.Add(btnRow);
+        card.Child = panel;
+        win.Content = card;
+
+
+
+        displayBox.KeyDown += (_, e) =>
+        {
+            var k = e.Key;
+            if (IsBindModifierKey(k))
+            {
+                display.Text = BuildBindModifierHint(e.KeyModifiers) + "...";
+                e.Handled = true;
+                return;
+            }
+            if (k == Key.Escape) { e.Handled = true; win.Close(null); return; }
+            var combo = BuildBindCombo(k, e.KeyModifiers);
+            display.Text = combo;
+            manualBox.Text = combo;
+            e.Handled = true;
+        };
+
+
+        win.KeyDown += (_, e) =>
+        {
+            if (e.Key == Key.Escape) win.Close(null);
+            else if (e.Key == Key.Enter) saveBtn.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        };
+
+        saveBtn.Click += (_, _) =>
+        {
+            var result = NormalizeBind(manualBox.Text);
+            win.Close(string.IsNullOrEmpty(result) ? _bindKey : result);
+        };
+        cancelBtn.Click += (_, _) => win.Close(null);
+        win.Opened += (_, _) => { displayBox.Focus(); };
+
+        var result2 = await win.ShowDialog<string>(owner);
+        if (!string.IsNullOrWhiteSpace(result2) && result2 != _bindKey)
+        {
+            _bindKey = result2;
+            var bindBtn = this.FindControl<Button>("BindInput");
+            if (bindBtn != null) bindBtn.Content = _bindKey;
+            ApplyLive();
+        }
+    }
+
+    private static bool IsBindModifierKey(Key key) =>
+        key is Key.LeftCtrl or Key.RightCtrl or Key.LeftShift or Key.RightShift
+            or Key.LeftAlt or Key.RightAlt or Key.LWin or Key.RWin;
+
+    private static string BuildBindModifierHint(KeyModifiers mods)
+    {
+        var parts = new List<string>();
+        if (mods.HasFlag(KeyModifiers.Control)) parts.Add("Ctrl");
+        if (mods.HasFlag(KeyModifiers.Shift)) parts.Add("Shift");
+        if (mods.HasFlag(KeyModifiers.Alt)) parts.Add("Alt");
+        if (mods.HasFlag(KeyModifiers.Meta)) parts.Add("Win");
+        return parts.Count > 0 ? string.Join("+", parts) + "+" : "";
+    }
+
+    private static string BuildBindCombo(Key key, KeyModifiers mods)
+    {
+        var parts = new List<string>();
+        if (mods.HasFlag(KeyModifiers.Control)) parts.Add("Ctrl");
+        if (mods.HasFlag(KeyModifiers.Shift)) parts.Add("Shift");
+        if (mods.HasFlag(KeyModifiers.Alt)) parts.Add("Alt");
+        if (mods.HasFlag(KeyModifiers.Meta)) parts.Add("Win");
+        parts.Add(BindKeyName(key));
+        return string.Join("+", parts);
+    }
+
+    private static string BindKeyName(Key key)
+    {
+        if (key >= Key.A && key <= Key.Z) return key.ToString();
+        if (key >= Key.D0 && key <= Key.D9) return key.ToString().Substring(1);
+        if (key >= Key.NumPad0 && key <= Key.NumPad9) return "Num" + key.ToString().Replace("NumPad", "");
+        if (key >= Key.F1 && key <= Key.F24) return key.ToString();
+        return key switch
+        {
+            Key.Space => "Space",
+            Key.Tab => "Tab",
+            Key.Enter => "Enter",
+            Key.Back => "Backspace",
+            Key.Delete => "Delete",
+            Key.Insert => "Insert",
+            Key.Home => "Home",
+            Key.End => "End",
+            Key.PageUp => "PageUp",
+            Key.PageDown => "PageDown",
+            Key.Up => "Up",
+            Key.Down => "Down",
+            Key.Left => "Left",
+            Key.Right => "Right",
+            Key.CapsLock => "CapsLock",
+            Key.PrintScreen => "PrtSc",
+            Key.Scroll => "ScrollLock",
+            Key.Pause => "Pause",
+            Key.OemPlus => "+",
+            Key.OemMinus => "-",
+            Key.OemComma => ",",
+            Key.OemPeriod => ".",
+            Key.OemQuestion => "/",
+            Key.Oem1 => ";",
+            Key.Oem7 => "'",
+            Key.Oem4 => "[",
+            Key.Oem6 => "]",
+            Key.Oem5 => "\\",
+            Key.Oem3 => "`",
+            _ => key.ToString()
+        };
+    }
+
+
+    private static string NormalizeBind(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return "";
+        var parts = raw.Split('+', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var mods = new List<string>();
+        string? main = null;
+        foreach (var p in parts)
+        {
+            switch (p.ToUpperInvariant())
+            {
+                case "CTRL": case "CONTROL": mods.Add("Ctrl"); break;
+                case "SHIFT": mods.Add("Shift"); break;
+                case "ALT": mods.Add("Alt"); break;
+                case "WIN": case "WINDOWS": case "META": mods.Add("Win"); break;
+                default:
+                    if (main == null)
+                        main = p.Length == 1 ? p.ToUpperInvariant() : char.ToUpperInvariant(p[0]) + p[1..];
+                    break;
+            }
+        }
+        if (main == null) return "";
+        mods.Add(main);
+        return string.Join("+", mods);
+    }
+
     private CrosshairState BuildCurrentState() => new CrosshairState
     {
         Preset = _selectedPreset, Animation = _selectedAnim,
@@ -553,28 +828,290 @@ public partial class CrosshairPage : UserControl
         var panel = this.FindControl<WrapPanel>("ColorGroup");
         if (panel == null) return;
         foreach (var hex in _colorHexes)
+            panel.Children.Add(MakeColorSwatch(hex));
+    }
+
+
+    private bool _previewVisible = true;
+
+    private Avalonia.Threading.DispatcherTimer? _bindTimer;
+    private bool _bindWasDown;
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern short GetAsyncKeyState(int vKey);
+
+    private void StartBindWatcher()
+    {
+        if (_bindTimer != null) return;
+        _bindTimer = new Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(40) };
+        _bindTimer.Tick += (_, _) => PollBind();
+        _bindTimer.Start();
+    }
+
+    private void PollBind()
+    {
+
+        var focused = TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement();
+        if (focused is Avalonia.Controls.TextBox) { _bindWasDown = false; return; }
+
+        var parts = (_bindKey ?? "F6").Split('+');
+        var main = parts.Length == 0 ? "F6" : parts[^1].Trim();
+        var vk = VkFor(main);
+        if (vk == null) { _bindWasDown = false; return; }
+
+        bool down = GetAsyncKeyState(vk.Value) < 0;
+        if (parts.Any(p => p.Trim() is "Ctrl" or "Control")) down = down && GetAsyncKeyState(0x11) < 0;
+        if (parts.Any(p => p.Trim() == "Shift")) down = down && GetAsyncKeyState(0x10) < 0;
+        if (parts.Any(p => p.Trim() == "Alt")) down = down && GetAsyncKeyState(0x12) < 0;
+
+        if (down && !_bindWasDown) ToggleOverlayByBind();
+        _bindWasDown = down;
+    }
+
+
+    private void ToggleOverlayByBind()
+    {
+        if (_overlayWindow == null || _overlayDispatcher == null) return;
+        _overlayDispatcher.Invoke(() =>
         {
-            var btn = new Button
+            if (_overlayWindow.IsVisible) _overlayWindow.Hide();
+            else _overlayWindow.Show();
+        });
+    }
+
+
+    private static int? VkFor(string name) => name switch
+    {
+        "Space" => 0x20, "Tab" => 0x09, "Enter" => 0x0D, "Backspace" => 0x08,
+        "Delete" => 0x2E, "Insert" => 0x2D, "Home" => 0x24, "End" => 0x23,
+        "PageUp" => 0x21, "PageDown" => 0x22, "Up" => 0x26, "Down" => 0x28,
+        "Left" => 0x25, "Right" => 0x27, "CapsLock" => 0x14, "PrtSc" => 0x2C,
+        "ScrollLock" => 0x91, "Pause" => 0x13,
+        _ when name.Length == 1 && char.IsLetter(name[0]) => char.ToUpperInvariant(name[0]),
+        _ when name.Length == 1 && char.IsDigit(name[0]) => name[0],
+        _ when name.StartsWith("Num") => (int?)null,
+        _ when name.StartsWith("F") && int.TryParse(name.Substring(1), out var f) && f >= 1 && f <= 24 => 0x70 + f - 1,
+        _ => null
+    };
+
+    private void TogglePreview()
+    {
+        var box = this.FindControl<Border>("PreviewBox");
+        var icon = this.FindControl<Avalonia.Controls.Shapes.Path>("PreviewEyeIcon");
+        if (box == null) return;
+
+        _previewVisible = !_previewVisible;
+        box.IsVisible = _previewVisible;
+
+        if (icon != null) icon.Opacity = _previewVisible ? 1.0 : 0.35;
+    }
+
+
+    private void SetupPaletteCard()
+    {
+        SetupPicker();
+
+        Dispatcher.UIThread.Post(UpdatePickerVisuals, DispatcherPriority.Loaded);
+    }
+
+    private void SetupPicker()
+    {
+        var svArea = this.FindControl<Border>("PickerSvArea");
+        var hueBar = this.FindControl<Border>("PickerHueBar");
+        if (svArea == null || hueBar == null) return;
+
+        _svBrush = new LinearGradientBrush
+        {
+            StartPoint = new RelativePoint(0, 0.5, RelativeUnit.Relative),
+            EndPoint = new RelativePoint(1, 0.5, RelativeUnit.Relative)
+        };
+        _svBrush.GradientStops.Add(new GradientStop(Colors.White, 0));
+        _svBrush.GradientStops.Add(new GradientStop(Colors.Red, 1));
+        svArea.Background = _svBrush;
+
+
+        var overlay = this.FindControl<Border>("PickerSvOverlay");
+        if (overlay != null)
+        {
+            var ovBrush = new LinearGradientBrush
             {
-                Width = 24, Height = 24, MinWidth = 24, MinHeight = 24,
-                MaxWidth = 24, MaxHeight = 24, Padding = new Thickness(0),
-                Tag = hex, Classes = { "pill" },
-                BorderBrush = new SolidColorBrush(Color.Parse(hex == _selectedColor ? "#ffffff" : "#232329")),
-                BorderThickness = new Thickness(2),
-                Background = new SolidColorBrush(Color.Parse(hex))
+                StartPoint = new RelativePoint(0.5, 0, RelativeUnit.Relative),
+                EndPoint = new RelativePoint(0.5, 1, RelativeUnit.Relative)
             };
-            btn.Click += (_, _) => { _selectedColor = hex; SyncColorButtons(); var tb = this.FindControl<TextBox>("CustomColorInput"); if (tb != null) tb.Text = hex; ApplyLive(); };
-            panel.Children.Add(btn);
+            ovBrush.GradientStops.Add(new GradientStop(Color.FromArgb(0, 0, 0, 0), 0));
+            ovBrush.GradientStops.Add(new GradientStop(Color.FromArgb(255, 0, 0, 0), 1));
+            overlay.Background = ovBrush;
         }
+
+
+        var hueStops = new (Color c, double o)[]
+        {
+            (Color.FromRgb(255, 0, 0), 0),
+            (Color.FromRgb(255, 255, 0), 1.0/6),
+            (Color.FromRgb(0, 255, 0), 2.0/6),
+            (Color.FromRgb(0, 255, 255), 3.0/6),
+            (Color.FromRgb(0, 0, 255), 4.0/6),
+            (Color.FromRgb(255, 0, 255), 5.0/6),
+            (Color.FromRgb(255, 0, 0), 1),
+        };
+        var hueBrush = new LinearGradientBrush
+        {
+            StartPoint = new RelativePoint(0, 0.5, RelativeUnit.Relative),
+            EndPoint = new RelativePoint(1, 0.5, RelativeUnit.Relative)
+        };
+        foreach (var (c, o) in hueStops)
+            hueBrush.GradientStops.Add(new GradientStop(c, o));
+        hueBar.Background = hueBrush;
+
+        HexToHsv(_selectedColor, out _pickH, out _pickS, out _pickV);
+
+        void ApplyPick()
+        {
+            _selectedColor = HsvToHex(_pickH, _pickS, _pickV);
+            SyncColorButtons();
+            ApplyLive();
+        }
+
+        void SvUpdate(Point p)
+        {
+            var b = svArea.Bounds;
+            _pickS = Math.Clamp(p.X / Math.Max(1, b.Width), 0, 1);
+            _pickV = Math.Clamp(1 - p.Y / Math.Max(1, b.Height), 0, 1);
+            ApplyPick();
+        }
+
+        svArea.PointerPressed += (_, e) =>
+        {
+            e.Pointer.Capture(svArea);
+            SvUpdate(e.GetPosition(svArea));
+            e.Handled = true;
+        };
+        svArea.PointerMoved += (_, e) => { if (e.Pointer.Captured == svArea) SvUpdate(e.GetPosition(svArea)); };
+        svArea.PointerReleased += (_, e) => e.Pointer.Capture(null);
+
+        void HueUpdate(Point p)
+        {
+            var b = hueBar.Bounds;
+            _pickH = Math.Clamp(p.X / Math.Max(1, b.Width), 0, 1) * 360;
+            ApplyPick();
+        }
+
+        hueBar.PointerPressed += (_, e) =>
+        {
+            e.Pointer.Capture(hueBar);
+            HueUpdate(e.GetPosition(hueBar));
+            e.Handled = true;
+        };
+        hueBar.PointerMoved += (_, e) => { if (e.Pointer.Captured == hueBar) HueUpdate(e.GetPosition(hueBar)); };
+        hueBar.PointerReleased += (_, e) => e.Pointer.Capture(null);
+
+        UpdatePickerVisuals();
+    }
+
+    private void UpdatePickerVisuals()
+    {
+        var svArea = this.FindControl<Border>("PickerSvArea");
+        var dot = this.FindControl<Border>("PickerDot");
+        var tb = this.FindControl<TextBox>("CustomColorInput");
+        if (svArea == null) return;
+
+        HexToHsv(_selectedColor, out _pickH, out _pickS, out _pickV);
+
+        var hueColor = HsvToColor(_pickH, 1, 1);
+        if (_svBrush != null && _svBrush.GradientStops.Count > 1 && _svBrush.GradientStops[1].Color != hueColor)
+            _svBrush.GradientStops[1].Color = hueColor;
+
+        var b = svArea.Bounds;
+        if (dot != null && b.Width > 0)
+        {
+            double x = Math.Clamp(_pickS * b.Width - 7, -7, b.Width - 7);
+            double y = Math.Clamp((1 - _pickV) * b.Height - 7, -7, b.Height - 7);
+            if (Canvas.GetLeft(dot) != x) Canvas.SetLeft(dot, x);
+            if (Canvas.GetTop(dot) != y) Canvas.SetTop(dot, y);
+            var dotColor = Color.Parse(_selectedColor);
+            if (dot.Background is not SolidColorBrush br || br.Color != dotColor)
+                dot.Background = new SolidColorBrush(dotColor);
+        }
+
+        var hex = _selectedColor.ToLowerInvariant();
+        if (tb != null && !tb.IsFocused && tb.Text != hex) tb.Text = hex;
+    }
+
+    private static Color HsvToColor(double h, double s, double v)
+    {
+        h = ((h % 360) + 360) % 360;
+        double c = v * s;
+        double x = c * (1 - Math.Abs(h / 60 % 2 - 1));
+        double m = v - c;
+        double r = 0, g = 0, b = 0;
+        if (h < 60) { r = c; g = x; }
+        else if (h < 120) { r = x; g = c; }
+        else if (h < 180) { g = c; b = x; }
+        else if (h < 240) { g = x; b = c; }
+        else if (h < 300) { r = x; b = c; }
+        else { r = c; b = x; }
+        return Color.FromRgb((byte)Math.Round((r + m) * 255), (byte)Math.Round((g + m) * 255), (byte)Math.Round((b + m) * 255));
+    }
+
+    private static string HsvToHex(double h, double s, double v)
+    {
+        var c = HsvToColor(h, s, v);
+        return $"#{c.R:x2}{c.G:x2}{c.B:x2}";
+    }
+
+    private static void HexToHsv(string hex, out double h, out double s, out double v)
+    {
+        h = 0; s = 1; v = 1;
+        try
+        {
+            var c = Color.Parse(hex);
+            double r = c.R / 255.0, g = c.G / 255.0, b = c.B / 255.0;
+            double max = Math.Max(r, Math.Max(g, b)), min = Math.Min(r, Math.Min(g, b));
+            double d = max - min;
+            v = max;
+            s = max <= 0 ? 0 : d / max;
+            if (d > 0)
+            {
+                if (max == r) h = 60 * ((g - b) / d % 6);
+                else if (max == g) h = 60 * ((b - r) / d + 2);
+                else h = 60 * ((r - g) / d + 4);
+                if (h < 0) h += 360;
+            }
+        }
+        catch { }
+    }
+
+    private Button MakeColorSwatch(string hex)
+    {
+        var btn = new Button
+        {
+            Width = 24, Height = 24, MinWidth = 24, MinHeight = 24,
+            MaxWidth = 24, MaxHeight = 24, Padding = new Thickness(0),
+            Tag = hex, Classes = { "pill" },
+            BorderBrush = new SolidColorBrush(Color.Parse(hex == _selectedColor ? "#ffffff" : "#232329")),
+            BorderThickness = new Thickness(2),
+            Background = new SolidColorBrush(Color.Parse(hex))
+        };
+        AutomationProperties.SetName(btn, hex);
+        btn.Click += (_, _) =>
+        {
+            _selectedColor = hex;
+            SyncColorButtons();
+            var tb = this.FindControl<TextBox>("CustomColorInput");
+            if (tb != null) tb.Text = hex;
+            ApplyLive();
+        };
+        return btn;
     }
 
     private void SyncColorButtons()
     {
         var panel = this.FindControl<WrapPanel>("ColorGroup");
-        if (panel == null) return;
-        foreach (var child in panel.Children)
-            if (child is Button b && b.Tag is string hex)
-                b.BorderBrush = new SolidColorBrush(Color.Parse(hex == _selectedColor ? "#ffffff" : "#232329"));
+        if (panel != null)
+            foreach (var child in panel.Children)
+                if (child is Button b && b.Tag is string hex)
+                    b.BorderBrush = new SolidColorBrush(Color.Parse(hex == _selectedColor ? "#ffffff" : "#232329"));
+        UpdatePickerVisuals();
     }
 
     private void SetupRainbowCard()
@@ -723,6 +1260,20 @@ public partial class CrosshairPage : UserControl
         SyncColorButtons();
         UpdateRainbowPreview();
 
+
+
+        var rbToggle = this.FindControl<Button>("RainbowToggleBtn");
+        if (rbToggle != null) rbToggle.Content = _rainbowEnabled ? "On" : "Rainbow";
+        var rbCard = this.FindControl<Border>("RainbowCard");
+        if (rbCard != null)
+        {
+            _rainbowAnimTimer?.Stop();
+            _rainbowExpandPhase = _rainbowEnabled ? 1 : 0;
+            rbCard.Height = _rainbowEnabled ? 130 : 0;
+            rbCard.IsVisible = _rainbowEnabled;
+            _rainbowCardOpen = _rainbowEnabled;
+        }
+
         var spinDirBtn = this.FindControl<Button>("SpinDirBtn");
         if (spinDirBtn != null) spinDirBtn.Content = _spinDir == "reverse" ? "Reverse" : "Normal";
         var orbitDirBtn = this.FindControl<Button>("OrbitDirBtn");
@@ -766,7 +1317,7 @@ public partial class CrosshairPage : UserControl
         _overlayDispatcher?.Invoke(() => _overlayWindow?.UpdateCrosshair(ch));
     }
 
-    /// <summary>Палитра rainbow для текущей темы — один источник и для превью, и для оверлея.</summary>
+
     private List<string> BuildPalette()
     {
         var palette = new List<string>();
@@ -973,8 +1524,8 @@ public partial class CrosshairPage : UserControl
         _animClock.Restart();
         _animPhase = 0;
 
-        RebuildPreview();   // форма строится один раз
-        PreviewFrame();     // кадр на t=0 (он же финальный, если анимации нет)
+        RebuildPreview();
+        PreviewFrame();
 
         var s = _previewState;
         bool needsAnim = s != null && (s.Animation != "none" || s.SpinEnabled || s.OrbitEnabled || s.RainbowEnabled);
@@ -990,21 +1541,24 @@ public partial class CrosshairPage : UserControl
         _previewTimer.Start();
     }
 
-    /// <summary>Строит фигуры превью один раз — при изменении настроек, а не каждый кадр.</summary>
+
     private void RebuildPreview()
     {
         if (_canvas == null) return;
         _canvas.Children.Clear();
         _previewBrushes.Clear();
         _previewShapes = null;
-        _previewTg = null;
-        _previewRotate = null;
+        _previewHalo = null;
+        _previewOuterTg = null;
+        _previewInnerTg = null;
+        _previewOrbit = null;
+        _previewSpin = null;
         _previewScale = null;
 
         var state = BuildCurrentState();
         _previewState = state;
 
-        // Та же палитра, что уходит в оверлей.
+
         var palette = BuildPalette();
         _previewPaletteCount = palette.Count;
         _previewPaletteRgb = new byte[palette.Count * 3];
@@ -1019,8 +1573,8 @@ public partial class CrosshairPage : UserControl
         const double center = 150.0;
         double posX = center + state.PosX;
         double posY = center + state.PosY;
-        // Орбита запекается в координаты фигур (эквивалент TranslateTransform(r,0) в оверлее),
-        // а общий поворот вокруг центра гонит фигуры по кругу.
+
+
         double cx = posX + (state.OrbitEnabled ? state.OrbitRadius : 0);
         double cy = posY;
 
@@ -1032,68 +1586,107 @@ public partial class CrosshairPage : UserControl
 
         var shapes = new Canvas { Width = 300, Height = 300 };
 
-        switch (state.Preset)
+
+        void DrawFigure(Canvas target)
         {
-            case "cross":
+            switch (state.Preset)
             {
-                var bars = new List<Bar>(2);
-                CrosshairGeometry.CrossBars(cx, cy, sz, t, bars);
-                AddBars(shapes, bars, brush);
-                break;
-            }
-            case "bracket":
-            {
-                var bars = new List<Bar>(8);
-                CrosshairGeometry.BracketBars(cx, cy, sz, t, bars);
-                AddBars(shapes, bars, brush);
-                break;
-            }
-            case "circle":
-            {
-                double d = CrosshairGeometry.CircleDiameter(sz);
-                var el = new Ellipse { Width = d, Height = d, Stroke = brush, StrokeThickness = t };
-                Canvas.SetLeft(el, Snap(cx - d / 2.0));
-                Canvas.SetTop(el, Snap(cy - d / 2.0));
-                shapes.Children.Add(el);
-                break;
-            }
-            case "custom":
-            {
-                var el = new TextBlock
+                case "cross":
                 {
-                    Text = _customSymbol,
-                    FontSize = CrosshairGeometry.SymbolFontSize(sz),
-                    Foreground = brush
-                };
-                el.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-                Canvas.SetLeft(el, Snap(cx - el.DesiredSize.Width / 2.0));
-                Canvas.SetTop(el, Snap(cy - el.DesiredSize.Height / 2.0));
-                shapes.Children.Add(el);
-                break;
-            }
-            case "dot":
-            default:
-            {
-                double d = CrosshairGeometry.DotSize(sz);
-                var el = new Ellipse { Width = d, Height = d, Fill = brush };
-                Canvas.SetLeft(el, Snap(cx - d / 2.0));
-                Canvas.SetTop(el, Snap(cy - d / 2.0));
-                shapes.Children.Add(el);
-                break;
+                    var bars = new List<Bar>(2);
+                    CrosshairGeometry.CrossBars(cx, cy, sz, t, bars);
+                    AddBars(target, bars, brush);
+                    break;
+                }
+                case "bracket":
+                {
+                    var bars = new List<Bar>(8);
+                    CrosshairGeometry.BracketBars(cx, cy, sz, t, bars);
+                    AddBars(target, bars, brush);
+                    break;
+                }
+                case "circle":
+                {
+                    double d = CrosshairGeometry.CircleDiameter(sz);
+                    var el = new Ellipse { Width = d, Height = d, Stroke = brush, StrokeThickness = t };
+                    Canvas.SetLeft(el, Snap(cx - d / 2.0));
+                    Canvas.SetTop(el, Snap(cy - d / 2.0));
+                    target.Children.Add(el);
+                    break;
+                }
+                case "custom":
+                {
+                    var el = new TextBlock
+                    {
+                        Text = _customSymbol,
+                        FontSize = CrosshairGeometry.SymbolFontSize(sz),
+                        Foreground = brush
+                    };
+                    el.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                    Canvas.SetLeft(el, Snap(cx - el.DesiredSize.Width / 2.0));
+                    Canvas.SetTop(el, Snap(cy - el.DesiredSize.Height / 2.0));
+                    target.Children.Add(el);
+                    break;
+                }
+                case "dot":
+                default:
+                {
+                    double d = CrosshairGeometry.DotSize(sz);
+                    var el = new Ellipse { Width = d, Height = d, Fill = brush };
+                    Canvas.SetLeft(el, Snap(cx - d / 2.0));
+                    Canvas.SetTop(el, Snap(cy - d / 2.0));
+                    target.Children.Add(el);
+                    break;
+                }
             }
         }
 
-        // Точка вращения — центр прицела (без орбитального смещения), как в оверлее.
-        _previewRotate = new RotateTransform();
+
+
+
+
+        _previewHalo = null;
+        if (state.Animation == "glow")
+        {
+            var halo = new Canvas { Width = 300, Height = 300 };
+            foreach (var (ringScale, ringOpacity) in CrosshairGeometry.GlowRings)
+            {
+                var ring = new Canvas { Width = 300, Height = 300, Opacity = ringOpacity };
+                DrawFigure(ring);
+
+                ring.RenderTransformOrigin = new RelativePoint(cx, cy, RelativeUnit.Absolute);
+                ring.RenderTransform = new ScaleTransform(ringScale, ringScale);
+                halo.Children.Add(ring);
+            }
+            halo.Opacity = CrosshairGeometry.GlowHaloMax;
+            shapes.Children.Add(halo);
+            _previewHalo = halo;
+        }
+
+        DrawFigure(shapes);
+
+
+
+        _previewSpin = new RotateTransform();
         _previewScale = new ScaleTransform(1, 1);
-        _previewTg = new TransformGroup();
-        _previewTg.Children.Add(_previewRotate);   // точка: сначала масштаб, потом поворот
-        _previewTg.Children.Add(_previewScale);
-        shapes.RenderTransformOrigin = new RelativePoint(posX, posY, RelativeUnit.Absolute);
-        shapes.RenderTransform = _previewTg;
+        _previewInnerTg = new TransformGroup();
+        _previewInnerTg.Children.Add(_previewSpin);
+        _previewInnerTg.Children.Add(_previewScale);
+        shapes.RenderTransformOrigin = new RelativePoint(cx, cy, RelativeUnit.Absolute);
+        shapes.RenderTransform = _previewInnerTg;
+
+
+
+        _previewOrbit = new RotateTransform();
+        _previewOuterTg = new TransformGroup();
+        _previewOuterTg.Children.Add(_previewOrbit);
+        var outer = new Canvas { Width = 300, Height = 300 };
+        outer.RenderTransformOrigin = new RelativePoint(posX, posY, RelativeUnit.Absolute);
+        outer.RenderTransform = _previewOuterTg;
+        outer.Children.Add(shapes);
 
         _previewShapes = shapes;
-        _canvas.Children.Add(shapes);
+        _canvas.Children.Add(outer);
     }
 
     private void AddBars(Canvas shapes, List<Bar> bars, IBrush brush)
@@ -1107,12 +1700,13 @@ public partial class CrosshairPage : UserControl
         }
     }
 
-    /// <summary>Один кадр анимации: двигает только трансформы, прозрачность и цвет.</summary>
+
     private void PreviewFrame()
     {
         var s = _previewState;
         var shapes = _previewShapes;
-        if (s == null || shapes == null || _previewTg == null || _previewRotate == null || _previewScale == null) return;
+        if (s == null || shapes == null || _previewOuterTg == null || _previewInnerTg == null
+            || _previewOrbit == null || _previewSpin == null || _previewScale == null) return;
 
         double t = _animPhase;
         double animScale = 1.0;
@@ -1123,7 +1717,7 @@ public partial class CrosshairPage : UserControl
             double dur = s.Animation == "scale"
                 ? CrosshairGeometry.ScaleDuration
                 : CrosshairGeometry.AnimDuration(s.Speed);
-            double u = CrosshairGeometry.Triangle(t, dur);
+            double u = CrosshairGeometry.SmoothWave(t, dur);
             switch (s.Animation)
             {
                 case "pulse":
@@ -1133,23 +1727,28 @@ public partial class CrosshairPage : UserControl
                     animScale = CrosshairGeometry.ScaleFrom + u * (CrosshairGeometry.ScaleTo - CrosshairGeometry.ScaleFrom);
                     break;
                 case "glow":
-                    animOpacity = (s.Opacity / 100.0) * (1.0 + u * (CrosshairGeometry.GlowDim - 1.0));
+
+                    if (_previewHalo != null)
+                        _previewHalo.Opacity = CrosshairGeometry.GlowHaloMin
+                            + u * (CrosshairGeometry.GlowHaloMax - CrosshairGeometry.GlowHaloMin);
                     break;
             }
         }
 
-        // Один угол = статичный поворот + спин + орбита: в оверлее всё это тоже
-        // сводится к поворотам вокруг одной точки, поэтому картинка совпадает.
-        double angle = s.Rotation;
-        if (s.SpinEnabled)
-        {
-            double phase = (t / CrosshairGeometry.SpinDuration(s.SpinSpeed)) * 360.0;
-            angle += s.SpinDir == "reverse" ? -phase : phase;
-        }
+
+
+        double posAngle = s.Rotation;
         if (s.OrbitEnabled)
         {
             double phase = (t / CrosshairGeometry.OrbitDuration(s.OrbitSpeed)) * 360.0;
-            angle += s.OrbitDir == "reverse" ? -phase : phase;
+            posAngle += s.OrbitDir == "reverse" ? -phase : phase;
+        }
+
+        double shapeAngle = 0;
+        if (s.SpinEnabled)
+        {
+            double phase = (t / CrosshairGeometry.SpinDuration(s.SpinSpeed)) * 360.0;
+            shapeAngle = s.SpinDir == "reverse" ? -phase : phase;
         }
 
         if (s.RainbowEnabled && _previewPaletteCount > 0)
@@ -1161,18 +1760,28 @@ public partial class CrosshairPage : UserControl
         }
 
         shapes.Opacity = animOpacity;
-        _previewRotate.Angle = angle;
+        _previewOrbit.Angle = posAngle;
+        _previewSpin.Angle = shapeAngle;
         _previewScale.ScaleX = _previewScale.ScaleY = animScale;
 
-        // Идентичный трансформ выключаем: без него тонкие линии остаются чёткими.
-        double norm = angle % 360.0;
-        if (norm < -180.0) norm += 360.0;
-        else if (norm > 180.0) norm -= 360.0;
-        bool identity = Math.Abs(norm) < 0.01 && Math.Abs(animScale - 1.0) < 0.0001;
-        shapes.RenderTransform = identity ? null : _previewTg;
+
+        var outer = shapes.Parent as Canvas;
+        if (outer != null)
+            outer.RenderTransform = Math.Abs(NormAngle(posAngle)) < 0.01 ? null : _previewOuterTg;
+        shapes.RenderTransform =
+            Math.Abs(NormAngle(shapeAngle)) < 0.01 && Math.Abs(animScale - 1.0) < 0.0001 ? null : _previewInnerTg;
     }
 
-    /// <summary>Привязка к границе физического пикселя с учётом DPI (как в оверлее).</summary>
+
+    private static double NormAngle(double angle)
+    {
+        double norm = angle % 360.0;
+        if (norm <= -180.0) norm += 360.0;
+        else if (norm > 180.0) norm -= 360.0;
+        return norm;
+    }
+
+
     private double Snap(double v)
     {
         double scale = 1.0;
@@ -1188,7 +1797,9 @@ public partial class CrosshairPage : UserControl
         _speed = def.Speed; _rotation = def.Rotation; _posX = def.PosX; _posY = def.PosY;
         _spinSpeed = def.SpinSpeed; _spinDir = def.SpinDir;
         _orbitRadius = def.OrbitRadius; _orbitSpeed = def.OrbitSpeed; _orbitDir = def.OrbitDir;
+        _rainbowEnabled = def.RainbowEnabled;
         _rainbowSpeed = def.RainbowSpeed; _rainbowTheme = def.RainbowTheme;
+        _rainbowCardOpen = false;
         _bindKey = def.BindKey; _customSymbol = def.Symbol;
     }
 
