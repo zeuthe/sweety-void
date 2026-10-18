@@ -71,7 +71,7 @@ public partial class HomePage : UserControl
         if (cardBinds != null) cardBinds.PointerPressed += (_, _) => _navigateTo("binds");
         if (cardHelpers != null) cardHelpers.PointerPressed += (_, _) => _navigateTo("helpers");
         if (cardTracker != null) cardTracker.PointerPressed += (_, _) => _navigateTo("tracker");
-        if (githubBtn != null) githubBtn.Click += (_, _) => System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("https://github.com/zeuthe/void-ui") { UseShellExecute = true });
+        if (githubBtn != null) githubBtn.Click += (_, _) => System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("https://github.com/zeuthe/sweety-void") { UseShellExecute = true });
         if (donateBtn != null) donateBtn.Click += (_, _) => DonateDialog.Show(GetParentWindow());
         if (settingsBtn != null) settingsBtn.Click += (_, _) => _navigateTo("settings");
     }

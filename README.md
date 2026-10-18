@@ -10,8 +10,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/zeuthe/void-ui/releases/latest"><img src="https://img.shields.io/github/v/release/zeuthe/void-ui?label=release&color=c1121f" alt="release"/></a>
-  <a href="https://github.com/zeuthe/void-ui/releases"><img src="https://img.shields.io/github/downloads/zeuthe/void-ui/total?color=c1121f" alt="downloads"/></a>
+  <a href="https://github.com/zeuthe/sweety-void/releases/latest"><img src="https://img.shields.io/github/v/release/zeuthe/sweety-void?label=release&color=c1121f" alt="release"/></a>
+  <a href="https://github.com/zeuthe/sweety-void/releases"><img src="https://img.shields.io/github/downloads/zeuthe/sweety-void/total?color=c1121f" alt="downloads"/></a>
   <a href="LICENSE.txt"><img src="https://img.shields.io/badge/license-source--available-c1121f" alt="license"/></a>
   <img src="https://img.shields.io/badge/.NET-8.0-8a2be2" alt=".NET 8"/>
 </p>
@@ -125,7 +125,7 @@ black-red palette, pulsing slowly, with a gothic cross watching from the corner.
 ## Install
 
 1. Grab **`VoidUI.Setup.exe`** from the
-   [latest release](https://github.com/zeuthe/void-ui/releases/latest).
+   [latest release](https://github.com/zeuthe/sweety-void/releases/latest).
 2. Run it — the installer offers components, installs to a folder of your choice and
    can launch the app when done.
 
@@ -136,7 +136,7 @@ Silent install (used by the in-app updater):
 ```
 
 Settings live in `%LOCALAPPDATA%\VoidUI\settings.json` — plain JSON, safe to edit or
-copy between machines. The app checks `api.github.com/repos/zeuthe/void-ui/releases/latest`
+copy between machines. The app checks `api.github.com/repos/zeuthe/sweety-void/releases/latest`
 on start and offers to download + install updates silently.
 
 ## Build from source

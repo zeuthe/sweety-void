@@ -17,7 +17,7 @@ public partial class InstallerWindow : Window
 
     private const string LicenseBody =
         "CUSTOM SOURCE-AVAILABLE LICENSE\n\n" +
-        "Copyright (c) 2026 zeuthe (Sweety Void / https://github.com/zeuthe/void-ui). All Rights Reserved.\n\n" +
+        "Copyright (c) 2026 zeuthe (Sweety Void / https://github.com/zeuthe/sweety-void). All Rights Reserved.\n\n" +
         "1. FORKING & MODIFICATION\n" +
         "You are permitted to create forks, view, analyze, modify and improve the source code of this " +
         "Project for personal, educational, non-commercial or commercial purposes, subject to the " +

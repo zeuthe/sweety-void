@@ -1,6 +1,6 @@
 CUSTOM SOURCE-AVAILABLE LICENSE
 
-Copyright (c) 2026 zeuthe (Sweety Void / https://github.com/zeuthe/void-ui).
+Copyright (c) 2026 zeuthe (Sweety Void / https://github.com/zeuthe/sweety-void).
 All Rights Reserved.
 
 This license is a courtesy English translation. The Russian text below is the

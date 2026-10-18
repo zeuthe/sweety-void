@@ -35,7 +35,7 @@ namespace VoidUI.Services
     public class UpdateService
     {
         private const string RepoOwner = "zeuthe";
-        private const string RepoName = "void-ui";
+        private const string RepoName = "sweety-void";
 
         private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(30) };
 

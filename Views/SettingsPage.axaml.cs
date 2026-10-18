@@ -444,7 +444,7 @@ public partial class SettingsPage : UserControl
 
         var repoBtn = this.FindControl<Button>("RepoLinkBtn");
         if (repoBtn != null) repoBtn.Click += (_, _) => Process.Start(
-            new ProcessStartInfo("https://github.com/zeuthe/void-ui") { UseShellExecute = true });
+            new ProcessStartInfo("https://github.com/zeuthe/sweety-void") { UseShellExecute = true });
     }
 
 
