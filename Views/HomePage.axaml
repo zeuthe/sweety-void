@@ -101,7 +101,8 @@
                         <StackPanel Orientation="Horizontal" Spacing="10">
                             <Button Classes="ghost" Name="GitHubBtn" Content="GitHub"/>
                             <Button Classes="action" Name="DonateBtn" Content="Donate"/>
-                            <Button Classes="ghost" Name="SettingsBtn" Content="Settings"/>
+                            <Button Classes="ghost" Name="SettingsBtn" Content="Settings"
+                                    AutomationProperties.AutomationId="SettingsBtn"/>
                         </StackPanel>
                     </StackPanel>
                 </Border>

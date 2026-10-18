@@ -476,10 +476,12 @@
                     <!-- Col 0: Logo + Tabs -->
                     <StackPanel Grid.Column="0" Grid.Row="0" Orientation="Horizontal" Spacing="10"
                                 VerticalAlignment="Center" Margin="4,0,0,0">
-                        <Border Name="LogoBtn" Cursor="Hand" Padding="6" CornerRadius="10"
+                        <Border Padding="6" CornerRadius="10"
                                 Background="{StaticResource SurfaceMid}">
-                            <Image Source="avares://VoidUI/assets/logo.ico" Width="22" Height="22"
-                                   VerticalAlignment="Center" Stretch="Uniform"/>
+                            <Button Name="LogoBtn" AutomationProperties.AutomationId="LogoBtn">
+                                <Image Source="avares://VoidUI/assets/logo.ico" Width="22" Height="22"
+                                       VerticalAlignment="Center" Stretch="Uniform"/>
+                            </Button>
                         </Border>
                         <Border Width="1" Height="18" Background="{StaticResource BorderDefault}" VerticalAlignment="Center" Margin="2,0"/>
                         <StackPanel Orientation="Horizontal" Spacing="0" VerticalAlignment="Center">

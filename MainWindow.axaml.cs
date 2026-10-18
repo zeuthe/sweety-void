@@ -132,8 +132,8 @@ public partial class MainWindow : Window
             btn.Click += (_, _) => NavigateTo(page);
         }
 
-        var logoBtn = this.FindControl<Border>("LogoBtn");
-        if (logoBtn != null) logoBtn.PointerPressed += (_, _) => NavigateTo("home");
+        var logoBtn = this.FindControl<Button>("LogoBtn");
+        if (logoBtn != null) logoBtn.Click += (_, _) => NavigateTo("home");
     }
 
     private void UpdateTabActive(string page)
