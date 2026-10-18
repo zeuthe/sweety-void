@@ -5,7 +5,7 @@
 <h1 align="center">SWEETY VOID</h1>
 
 <p align="center">
-  <b>A flat, terminal-styled configuration suite for Rust</b><br/>
+  <b>A flat, configuration suite for Rust</b><br/>
   Crosshair overlay · session tracker · helpers · themes
 </p>
 
