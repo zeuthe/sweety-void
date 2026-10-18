@@ -13,8 +13,8 @@
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
     <DebugType>none</DebugType>
-    <OutputPath>D:\Void-ui\_build\bin\</OutputPath>
-    <BaseIntermediateOutputPath>D:\Void-ui\obj\</BaseIntermediateOutputPath>
+    <OutputPath>_build\bin\</OutputPath>
+    <BaseIntermediateOutputPath>obj\</BaseIntermediateOutputPath>
     <ApplicationIcon>assets\icon.ico</ApplicationIcon>
   </PropertyGroup>
 
