@@ -16,20 +16,35 @@ public partial class InstallerWindow : Window
     private enum Step { Welcome, License, Path, Features, Progress, Finish }
 
     private const string LicenseBody =
-        "MIT License\n\n" +
-        "Copyright (c) 2026 Sweety (https://github.com/zeuthe)\n\n" +
-        "Permission is hereby granted, free of charge, to any person obtaining a copy of this software and " +
-        "associated documentation files (the \"Software\"), to deal in the Software without restriction, " +
-        "including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, " +
-        "and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, " +
-        "subject to the following conditions:\n\n" +
-        "The above copyright notice and this permission notice shall be included in all copies or substantial " +
-        "portions of the Software.\n\n" +
-        "THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT " +
-        "LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. " +
-        "IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, " +
-        "WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE " +
-        "SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.\n\n" +
+        "CUSTOM SOURCE-AVAILABLE LICENSE\n\n" +
+        "Copyright (c) 2026 zeuthe (Sweety Void / https://github.com/zeuthe/void-ui). All Rights Reserved.\n\n" +
+        "1. FORKING & MODIFICATION\n" +
+        "You are permitted to create forks, view, analyze, modify and improve the source code of this " +
+        "Project for personal, educational, non-commercial or commercial purposes, subject to the " +
+        "conditions set out below.\n\n" +
+        "2. ATTRIBUTION\n" +
+        "When publishing, distributing or demonstrating any modified version (fork) or product created " +
+        "on the basis of this Project, you MUST preserve an explicit indication of the original Project " +
+        "and its author, and include a link to the official repository/source of the original Project in " +
+        "the description of your product and in its interface (the \"About\" section).\n\n" +
+        "3. DONATION & SALES INTEGRITY\n" +
+        "In any fork, build, modified version or derived product it is FORBIDDEN to remove, hide, " +
+        "modify, substitute or block the built-in links or modules for collecting donations, the sales " +
+        "systems or the financial support channels of the original author, or to redirect the " +
+        "built-in payment mechanisms of the original author to your own payment details.\n\n" +
+        "4. NO MALWARE / MALICIOUS CODE\n" +
+        "It is prohibited to use the code of this Project to create, distribute or integrate malicious " +
+        "software (malware, spyware, trojans, ransomware, adware, etc.), hidden miners, personal data " +
+        "scrapers, keyloggers or any components that compromise the security or privacy of users.\n\n" +
+        "5. NO ADS & NO PAID SUBSCRIPTIONS\n" +
+        "Modified versions and builds must not embed third-party advertising banners, trackers, " +
+        "pop-ups or advertising networks, and must not introduce paid subscriptions or paywalls over " +
+        "the basic functionality of the Project, with the exception of the official sales features " +
+        "laid down by the original author.\n\n" +
+        "6. DISCLAIMER OF WARRANTY\n" +
+        "The software is provided \"AS IS\", without warranty of any kind. The author shall not be " +
+        "liable for any losses or problems arising from the use of this software or of its forks. " +
+        "The full text (English + original Russian) is in LICENSE.txt in the repository.\n\n" +
         "THIRD-PARTY COMPONENTS\n\n" +
         "This application bundles third-party open-source components, including Avalonia UI (MIT), the .NET " +
         "runtime and Windows Desktop runtime (MIT), Newtonsoft.Json (MIT) and QRCoder (MIT). Their licenses apply " +

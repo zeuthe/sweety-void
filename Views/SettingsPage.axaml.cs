@@ -441,6 +441,10 @@ public partial class SettingsPage : UserControl
 
         var exportBtn = this.FindControl<Button>("ExportBtn");
         if (exportBtn != null) exportBtn.Click += (_, _) => ExportConfig();
+
+        var repoBtn = this.FindControl<Button>("RepoLinkBtn");
+        if (repoBtn != null) repoBtn.Click += (_, _) => Process.Start(
+            new ProcessStartInfo("https://github.com/zeuthe/void-ui") { UseShellExecute = true });
     }
 
 

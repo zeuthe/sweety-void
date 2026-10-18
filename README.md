@@ -12,7 +12,7 @@
 <p align="center">
   <a href="https://github.com/zeuthe/void-ui/releases/latest"><img src="https://img.shields.io/github/v/release/zeuthe/void-ui?label=release&color=c1121f" alt="release"/></a>
   <a href="https://github.com/zeuthe/void-ui/releases"><img src="https://img.shields.io/github/downloads/zeuthe/void-ui/total?color=c1121f" alt="downloads"/></a>
-  <a href="LICENSE.txt"><img src="https://img.shields.io/badge/license-MIT-c1121f" alt="license"/></a>
+  <a href="LICENSE.txt"><img src="https://img.shields.io/badge/license-source--available-c1121f" alt="license"/></a>
   <img src="https://img.shields.io/badge/.NET-8.0-8a2be2" alt=".NET 8"/>
 </p>
 
@@ -172,6 +172,13 @@ coordinates).
 
 ## License
 
-[MIT](LICENSE.txt) © [Sweety](https://github.com/zeuthe)
+**Custom Source-Available License** © 2026 [zeuthe](https://github.com/zeuthe) — full text in
+[LICENSE.txt](LICENSE.txt) (English translation + original Russian text).
+
+In short: fork and modify freely — personal, educational, non-commercial or commercial — provided you
+keep clear attribution with a link to this repository in your product description and its About
+section, leave the author's built-in donation and sales mechanisms untouched, and add no malware,
+no third-party ads and no paywalls over the basic functionality. Third-party components (Avalonia,
+.NET, QRCoder, Newtonsoft.Json) keep their own MIT licenses.
 
 Not affiliated with Facepunch Studios. Use at your own risk.

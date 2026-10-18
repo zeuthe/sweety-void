@@ -176,7 +176,7 @@
                     </Border>
                     <StackPanel Spacing="8">
                         <CheckBox Name="AcceptLicenseCheck"
-                                  Content="I have read and accept the MIT License terms."/>
+                                  Content="I have read and accept the Custom Source-Available License terms."/>
                         <CheckBox Name="AcceptThirdPartyCheck"
                                   Content="I understand this app bundles third-party open-source components (Avalonia UI, .NET) under their own licenses."/>
                         <CheckBox Name="AcceptRiskCheck"

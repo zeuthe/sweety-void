@@ -1,10 +1,12 @@
+using System.IO;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
-using VoidUI.Services;
+using Avalonia.Media.Imaging;
+using QRCoder;
 
 namespace VoidUI.Views;
 
@@ -231,7 +233,7 @@ public static class DonateDialog
             HorizontalAlignment = HorizontalAlignment.Center,
             Margin = new Thickness(0, 8),
         };
-        var qr = QrCodeService.Render(method.Addr);
+        var qr = Qr.Render(method.Addr);
         qrBorder.Child = qr != null
             ? new Image { Source = qr, Width = 160, Height = 160, Stretch = Stretch.Uniform }
             : new TextBlock { Text = "QR", Width = 160, Height = 160 };
@@ -366,5 +368,34 @@ public static class DonateDialog
         button.HorizontalAlignment = HorizontalAlignment.Center;
         button.Click += (_, _) => win.Close();
         return button;
+    }
+
+    /// <summary>
+    /// QR generation for the donate flows — kept inside the donate block so all
+    /// donation-related code lives in one file.
+    /// </summary>
+    private static class Qr
+    {
+        private static readonly byte[] Dark = { 0, 0, 0 };
+        private static readonly byte[] Light = { 255, 255, 255 };
+
+        /// <summary>Builds a QR bitmap, or null when the payload cannot be encoded.</summary>
+        public static Bitmap? Render(string payload)
+        {
+            if (string.IsNullOrWhiteSpace(payload)) return null;
+
+            try
+            {
+                using var generator = new QRCodeGenerator();
+                using var data = generator.CreateQrCode(payload, QRCodeGenerator.ECCLevel.M);
+                using var png = new PngByteQRCode(data);
+                using var stream = new MemoryStream(png.GetGraphic(10, Dark, Light));
+                return new Bitmap(stream);
+            }
+            catch
+            {
+                return null; // a broken payload must never take the dialog down
+            }
+        }
     }
 }

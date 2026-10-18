@@ -103,6 +103,11 @@
                     <TextBlock Text=".NET 8 + Avalonia UI" Foreground="{StaticResource TextTertiary}" FontSize="11"/>
                     <TextBlock Text="A comprehensive Rust configuration tool with graphics presets, crosshair overlay, keybind management, and tracker analytics."
                                Foreground="{StaticResource TextTertiary}" FontSize="11" TextWrapping="Wrap"/>
+                    <TextBlock Text="License: Custom Source-Available — © 2026 zeuthe. Forks allowed with attribution; donation and sales mechanisms of the original author must stay intact."
+                               Foreground="{StaticResource TextTertiary}" FontSize="11" TextWrapping="Wrap"/>
+                    <Button Classes="ghost" Name="RepoLinkBtn" Content="github.com/zeuthe/void-ui"
+                            AutomationProperties.AutomationId="RepoLinkBtn"
+                            HorizontalAlignment="Left" Margin="0,2,0,0"/>
                 </StackPanel>
             </Border>
 

@@ -880,8 +880,8 @@ public partial class MainWindow : Window
                     var blink = (_doneTicks / 3) % 2 == 0;
                     if (fileLabel != null)
                     {
-                        // Подпись со смайликом длиннее фиксированной ширины — снимаем её,
-                        // иначе строка обрезается и статус под ней не виден.
+                        // The caption with the kaomoji is longer than the fixed width — drop the
+                        // width constraint, otherwise the text clips and the status below is hidden.
                         fileLabel.Width = double.NaN;
                         fileLabel.Text = blink ? _doneCaption : "ready";
                         fileLabel.IsVisible = true;
