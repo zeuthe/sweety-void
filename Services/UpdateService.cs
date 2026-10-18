@@ -164,10 +164,7 @@ namespace VoidUI.Services
                 {
 
 
-                    var url = _assetUrl;
-                    if (string.IsNullOrEmpty(url))
-                        url = $"https://github.com/{RepoOwner}/{RepoName}/releases/download/" +
-                              $"{ReleaseTag}/VoidUI.Setup.exe";
+                    var url = await ResolveAssetUrlAsync(token);
 
                     await DownloadAssetAsync(url, $"VoidUI.Setup.{LatestVersion}.exe", token);
                 }
@@ -285,6 +282,32 @@ namespace VoidUI.Services
         }
 
 
+
+        // Installer asset names accepted from a release; releases may ship either one.
+        private static readonly string[] InstallerAssetNames = { "VoidUI.Setup.exe", "SVoid.Setup.exe" };
+
+        // Resolves the download url: the asset url taken from the release json when it
+        // exists, otherwise probes the known installer names for the current tag.
+        private async Task<string> ResolveAssetUrlAsync(CancellationToken ct)
+        {
+            if (!string.IsNullOrWhiteSpace(_assetUrl)) return _assetUrl;
+
+            var root = $"https://github.com/{RepoOwner}/{RepoName}/releases/download/{ReleaseTag}";
+            foreach (var name in InstallerAssetNames)
+            {
+                var url = $"{root}/{name}";
+                try
+                {
+                    using var head = new HttpRequestMessage(HttpMethod.Head, url);
+                    using var resp = await Http.SendAsync(head, ct);
+                    if (resp.IsSuccessStatusCode) return url;
+                }
+                catch (OperationCanceledException) { throw; }
+                catch { /* try the next name */ }
+            }
+
+            return $"{root}/{InstallerAssetNames[^1]}";
+        }
 
         private static JToken SelectInstallerAsset(JArray assets)
         {
