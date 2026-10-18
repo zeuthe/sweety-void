@@ -17,7 +17,7 @@ namespace VoidUI.Views;
 /// </summary>
 public static class DonateDialog
 {
-    private const string TradeLink = "https://steamcommunity.com/tradeoffer/new/?partner=1481327474&token=_tqcnrxD";
+    private const string TradeLink = "https://steamcommunity.com/tradeoffer/new/?partner=1682532214&token=xnMa8gnW";
     private const string DestreamLink = "https://destream.net/live/zeuthes/donate";
 
     private static readonly Color PageBg = Color.Parse("#0c0c0e");
