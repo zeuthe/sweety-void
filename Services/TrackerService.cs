@@ -14,6 +14,11 @@ namespace VoidUI.Services
     public class TrackerService
     {
         private readonly SteamService _steamService;
+
+        // _monitorGate guards _monitorCts; _parseGate serializes log parsing so
+        // a winding-down loop and a freshly started one never parse at once.
+        private readonly object _monitorGate = new();
+        private readonly object _parseGate = new();
         private CancellationTokenSource _monitorCts;
         private readonly HashSet<string> _processedDeaths = new();
         private readonly List<ServerInfo> _servers = new();
@@ -79,15 +84,22 @@ namespace VoidUI.Services
 
         public void StartMonitoring(string mode, double intervalSeconds, int spreadSeconds)
         {
-            if (_monitorCts != null) return;
+            CancellationTokenSource cts;
+            lock (_monitorGate)
+            {
+                // Idempotent: a second start while a loop is live is a no-op.
+                if (_monitorCts != null) return;
 
-            ParseMode = mode;
-            IntervalSeconds = Math.Max(1.0, intervalSeconds);
-            IntervalSpread = Math.Max(0, spreadSeconds);
+                ParseMode = mode;
+                IntervalSeconds = Math.Max(1.0, intervalSeconds);
+                IntervalSpread = Math.Max(0, spreadSeconds);
 
-            _lastReadPosition = 0;
-            var cts = new CancellationTokenSource();
-            _monitorCts = cts;
+                cts = new CancellationTokenSource();
+                _monitorCts = cts;
+            }
+
+            // The position rewind happens inside the loop under _parseGate, so
+            // it cannot race an in-flight parse of a loop still winding down.
             Task.Run(() => MonitorLoop(cts));
             OnStatusChanged?.Invoke(StatusFor(mode));
             OnDataUpdated?.Invoke(_servers);
@@ -102,9 +114,24 @@ namespace VoidUI.Services
 
         public void StopMonitoring()
         {
+            CancellationTokenSource cts;
+            lock (_monitorGate)
+            {
+                // Detach first: IsMonitoring flips to false right away, so a
+                // RUN click arriving before the old loop wakes up starts a
+                // fresh loop instead of being swallowed by the dying one
+                // (that race was the "press twice to start" bug).
+                cts = _monitorCts;
+                _monitorCts = null;
+            }
 
+            if (cts == null) return;
+            try { cts.Cancel(); } catch { /* already disposed */ }
 
-            _monitorCts?.Cancel();
+            // The initiator reports the stop; the loop itself only reports
+            // endings it caused naturally (once-mode done or an error).
+            OnStatusChanged?.Invoke("Stopped");
+            OnParseFinished?.Invoke(ParseMode);
         }
 
         private static string StatusFor(string mode) => mode switch
@@ -130,13 +157,18 @@ namespace VoidUI.Services
         private async Task MonitorLoop(CancellationTokenSource cts)
         {
             var token = cts.Token;
+
+            // Start of a fresh run rewinds the reader (under _parseGate so it
+            // cannot interleave with a still-running parse of an old loop).
+            lock (_parseGate) { _lastReadPosition = 0; }
+
             try
             {
                 while (!token.IsCancellationRequested)
                 {
                     try
                     {
-                        ProcessLog();
+                        lock (_parseGate) { ProcessLog(); }
                     }
                     catch (Exception ex)
                     {
@@ -151,10 +183,20 @@ namespace VoidUI.Services
             }
             finally
             {
+                // Report only natural endings: if the loop was detached by
+                // StopMonitoring (or replaced by a newer loop), that initiator
+                // owns the state and a stale "Stopped" must not overwrite it.
+                var stillCurrent = false;
+                lock (_monitorGate)
+                {
+                    if (_monitorCts == cts) { _monitorCts = null; stillCurrent = true; }
+                }
 
-                if (_monitorCts == cts) _monitorCts = null;
-                OnStatusChanged?.Invoke("Stopped");
-                OnParseFinished?.Invoke(ParseMode);
+                if (stillCurrent)
+                {
+                    OnStatusChanged?.Invoke("Stopped");
+                    OnParseFinished?.Invoke(ParseMode);
+                }
                 OnDataUpdated?.Invoke(_servers);
             }
         }

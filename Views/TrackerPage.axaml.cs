@@ -31,6 +31,10 @@ public partial class TrackerPage : UserControl
 
     private bool _suppressPersist;
 
+    private bool _serviceWired;
+
+    private DateTime _lastRunClick = DateTime.MinValue;
+
     public TrackerPage(TrackerService trackerService, SettingsService settings)
     {
         _trackerService = trackerService;
@@ -38,16 +42,29 @@ public partial class TrackerPage : UserControl
         InitializeComponent();
         _customSites.AddRange(settings.GetSettings().Tracker.CustomSites ?? new List<TrackedSite>());
         Loaded += OnLoaded;
+        DetachedFromVisualTree += OnDetachedFromVisualTree;
     }
 
     private void OnLoaded(object? sender, RoutedEventArgs e)
     {
-        _trackerService.OnDataUpdated += OnDataUpdated;
-        _trackerService.OnStatusChanged += OnStatusChanged;
-        _trackerService.OnParseFinished += OnParseFinished;
+        // Loaded fires again if the page is ever re-attached; wiring twice
+        // would stack duplicate click handlers (one click = two toggles of
+        // the parser - the "I have to press RUN twice" symptom).
+        if (!_serviceWired)
+        {
+            _serviceWired = true;
+            _trackerService.OnDataUpdated += OnDataUpdated;
+            _trackerService.OnStatusChanged += OnStatusChanged;
+            _trackerService.OnParseFinished += OnParseFinished;
+        }
 
         WireParseModeStrip();
         WireSplitter();
+
+        // A fresh page must reflect a parser that is already running - the
+        // service outlives page instances across navigation.
+        _isMonitoring = _trackerService.IsMonitoring;
+        SyncRunButton();
 
         var clearLogBtn = this.FindControl<Button>("ClearLogBtn");
         if (clearLogBtn != null) clearLogBtn.Click += (_, _) =>
@@ -71,6 +88,16 @@ public partial class TrackerPage : UserControl
         if (filterBox != null) filterBox.TextChanged += (_, _) => ApplyFilter(filterBox.Text);
 
         RenderCustomSitesBar();
+    }
+
+    private void OnDetachedFromVisualTree(object? sender, VisualTreeAttachmentEventArgs e)
+    {
+        // Navigation replaces the page instance while the service outlives it;
+        // ghost subscriptions would run forever and slow every parse tick.
+        _serviceWired = false;
+        _trackerService.OnDataUpdated -= OnDataUpdated;
+        _trackerService.OnStatusChanged -= OnStatusChanged;
+        _trackerService.OnParseFinished -= OnParseFinished;
     }
 
     private void ApplyFilter(string? text)
@@ -310,39 +337,52 @@ public partial class TrackerPage : UserControl
     private void SelectParseMode(string mode)
     {
         var cs = _settings.GetSettings().Tracker;
+        var changed = cs.ParseMode != mode;
         cs.ParseMode = mode;
         _settings.Save(_settings.GetSettings());
 
-
-        if (_isMonitoring)
+        // Restart only when the mode really changed - re-picking the active
+        // mode used to bounce the parser (stop + start churn for nothing).
+        if (changed && _trackerService.IsMonitoring)
         {
             _trackerService.StopMonitoring();
             _activeMode = mode;
             _trackerService.StartMonitoring(mode, IntervalSecondsTotal(), cs.IntervalSpread);
         }
 
+        _isMonitoring = _trackerService.IsMonitoring;
+
         SyncModeStrip();
+        SyncRunButton();
         CloseParseMenu();
     }
 
 
     private void OnRunParseClicked()
     {
+        // Debounce: a physical double-click must toggle the parser once, not
+        // twice (two toggles = start + instant stop = "it did not start").
+        var now = DateTime.UtcNow;
+        if ((now - _lastRunClick).TotalMilliseconds < 350) return;
+        _lastRunClick = now;
+
         var cs = _settings.GetSettings().Tracker;
         var mode = string.IsNullOrEmpty(cs.ParseMode) ? TrackerService.ModeOnce : cs.ParseMode;
 
-        if (_isMonitoring)
+        // The service is the single source of truth for the run state; the old
+        // local flag could drift out of sync and swallow the next click.
+        if (_trackerService.IsMonitoring)
         {
             _trackerService.StopMonitoring();
-            _isMonitoring = false;
             _activeMode = "";
         }
         else
         {
             _activeMode = mode;
-            _isMonitoring = true;
             _trackerService.StartMonitoring(mode, IntervalSecondsTotal(), cs.IntervalSpread);
         }
+
+        _isMonitoring = _trackerService.IsMonitoring;
 
         SyncModeStrip();
         SyncRunButton();
