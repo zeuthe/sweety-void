@@ -282,6 +282,27 @@ namespace VoidUI.Services
         }
 
 
+        // Installers left in the updates folder by previous auto-updates are dead
+        // weight (each weighs ~120 MB). The app restarts after an update, so by
+        // the time we start nothing needs them anymore - purge on every launch.
+        public static void PurgeStaleInstallers()
+        {
+            try
+            {
+                var dir = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "VoidUI", "updates");
+                if (!Directory.Exists(dir)) return;
+
+                foreach (var file in Directory.EnumerateFiles(dir))
+                {
+                    try { File.Delete(file); } catch { /* locked - will go on the next launch */ }
+                }
+            }
+            catch { }
+        }
+
+
 
         // Installer asset names accepted from a release; releases may ship either one.
         private static readonly string[] InstallerAssetNames = { "VoidUI.Setup.exe", "SVoid.Setup.exe" };
