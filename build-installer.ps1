@@ -3,7 +3,10 @@
 #      VoidUI.exe stays a thin launcher and all code lands in VoidUI.dll +
 #      dependency DLLs, so an update can replace or drop assemblies
 #   2. packs the publish output into payload.zip
-#   3. builds the Avalonia installer with the payload embedded
+#   3. builds a slim installer variant (no payload) - it becomes the
+#      Uninstall.exe in the install folder (~15 MB instead of ~120 MB)
+#   4. builds the full Avalonia installer with the payload and the slim
+#      uninstaller embedded
 #
 # Usage:  powershell -ExecutionPolicy Bypass -File .\build-installer.ps1
 #         powershell -ExecutionPolicy Bypass -File .\build-installer.ps1 -SkipApp
@@ -52,7 +55,7 @@ Get-Process -Name "VoidUI", "VoidUI.Setup" -ErrorAction SilentlyContinue | Stop-
 Start-Sleep -Milliseconds 500
 
 if (-not $SkipApp) {
-    Write-Host "[1/3] Publishing app (self-contained, code split into DLLs)..." -ForegroundColor Yellow
+    Write-Host "[1/4] Publishing app (self-contained, code split into DLLs)..." -ForegroundColor Yellow
     if (Test-Path $appPub) { Remove-Item $appPub -Recurse -Force }
     # The app's obj is relocated to C: for this build (see -p:BaseIntermediateOutputPath).
     # Remove the stale obj at the default location, otherwise its generated *.g.cs files
@@ -82,7 +85,7 @@ if (-not $SkipApp) {
         if (Test-Path $d) { Remove-Item $d -Recurse -Force -ErrorAction SilentlyContinue }
     }
 
-    Write-Host "[2/3] Packing payload.zip..." -ForegroundColor Yellow
+    Write-Host "[2/4] Packing payload.zip..." -ForegroundColor Yellow
     if (Test-Path $payload) { Remove-Item $payload -Force }
     Compress-Archive -Path (Join-Path $appPub "*") -DestinationPath $payload -CompressionLevel Optimal
     # Payload is packed; the publish dir is no longer needed either.
@@ -92,7 +95,21 @@ elseif (-not (Test-Path $payload)) {
     throw "payload.zip not found at $payload - run without -SkipApp first"
 }
 
-Write-Host "[3/3] Building installer..." -ForegroundColor Yellow
+Write-Host "[3/4] Building slim uninstaller (no payload)..." -ForegroundColor Yellow
+$slimOut = Join-Path $temp "voidui-setup-slim"
+if (Test-Path $slimOut) { Remove-Item $slimOut -Recurse -Force }
+dotnet publish (Join-Path $root "Installer\VoidUI.Installer.csproj") `
+    -c $Configuration -r win-x64 --self-contained true `
+    -p:PublishSingleFile=true `
+    -p:IncludeNativeLibrariesForSelfExtract=true `
+    -p:EnableCompressionInSingleFile=true `
+    -p:SlimBuild=true `
+    -p:Version="$Version" `
+    -o $slimOut
+if ($LASTEXITCODE -ne 0) { throw "dotnet publish (slim uninstaller) failed" }
+$slimExe = Join-Path $slimOut "VoidUI.Setup.exe"
+
+Write-Host "[4/4] Building installer..." -ForegroundColor Yellow
 if (Test-Path $insOut) { Remove-Item $insOut -Recurse -Force }
 dotnet publish (Join-Path $root "Installer\VoidUI.Installer.csproj") `
     -c $Configuration -r win-x64 --self-contained true `
@@ -100,14 +117,16 @@ dotnet publish (Join-Path $root "Installer\VoidUI.Installer.csproj") `
     -p:IncludeNativeLibrariesForSelfExtract=true `
     -p:EnableCompressionInSingleFile=true `
     -p:PayloadZip="$payload" `
+    -p:UninstallerExe="$slimExe" `
     -p:Version="$Version" `
     -o $insOut
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish (installer) failed" }
 
 $setup = Join-Path $insOut "VoidUI.Setup.exe"
 $sizeMb = [math]::Round((Get-Item $setup).Length / 1MB, 1)
+$slimMb = [math]::Round((Get-Item $slimExe).Length / 1MB, 1)
 Write-Host ""
-Write-Host "DONE: $setup ($sizeMb MB)" -ForegroundColor Green
+Write-Host "DONE: $setup ($sizeMb MB), slim uninstaller $slimMb MB" -ForegroundColor Green
 
 # Try to drop a copy next to the app for convenience.
 $deliver = Join-Path $root "_build\installer"

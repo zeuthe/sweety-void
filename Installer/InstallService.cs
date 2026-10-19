@@ -13,7 +13,22 @@ namespace VoidUI.Installer;
 internal static class Product
 {
     public const string Name = "Sweety Void";
-    public const string Version = "1.0.0";
+
+    // The build passes -p:Version, so the assembly version is the source of
+    // truth; the old hardcoded constant went stale and reported 1.0.0.
+    public static string Version
+    {
+        get
+        {
+            try
+            {
+                var v = typeof(Product).Assembly.GetName().Version;
+                return v == null ? "1.0.0" : $"{v.Major}.{v.Minor}.{v.Build}";
+            }
+            catch { return "1.0.0"; }
+        }
+    }
+
     public const string Publisher = "Sweety";
     public const string AppExe = "VoidUI.exe";
     public const string UninstallExe = "Uninstall.exe";
@@ -254,13 +269,29 @@ internal static class InstallService
 
     private static void CreateUninstaller(string target)
     {
-        var current = Environment.ProcessPath;
-        if (string.IsNullOrEmpty(current)) return;
-
         var destination = Path.Combine(target, Product.UninstallExe);
         try { if (File.Exists(destination)) File.Delete(destination); } catch { }
 
-        // Same volume → hard link keeps the (large) installer without duplicating bytes.
+        // Preferred: the slim uninstaller embedded at build time - it carries no
+        // app payload, so it weighs ~15 MB instead of a full copy of the setup.
+        try
+        {
+            using var src = typeof(InstallService).Assembly
+                .GetManifestResourceStream("uninstaller.exe");
+            if (src != null)
+            {
+                using var dst = File.Create(destination);
+                src.CopyTo(dst);
+                return;
+            }
+        }
+        catch { /* no embedded uninstaller - fall back to the legacy scheme */ }
+
+        // Legacy fallback (old releases): a hard link to the full installer on
+        // the same volume, so the large binary at least is not duplicated.
+        var current = Environment.ProcessPath;
+        if (string.IsNullOrEmpty(current)) return;
+
         if (!NativeMethods.CreateHardLink(destination, current, IntPtr.Zero))
         {
             try { File.Copy(current, destination, true); } catch { /* fallback failed */ }

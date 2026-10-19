@@ -12,8 +12,10 @@ internal static class Program
     [STAThread]
     public static int Main(string[] args)
     {
-        // Uninstall.exe is a hard link to this same binary. Running it directly
-        // (double-click, no arguments) must start the uninstaller, not the wizard.
+        // Uninstall.exe is the slim uninstaller dropped by the wizard (or, on
+        // legacy installs, a hard link to the full installer). Running it
+        // directly (double-click, no arguments) must start the uninstaller,
+        // not the wizard.
         var exeName = Path.GetFileName(Environment.ProcessPath) ?? string.Empty;
         if (exeName.Equals(Product.UninstallExe, StringComparison.OrdinalIgnoreCase) &&
             !args.Any(a => string.Equals(a, "--uninstall", StringComparison.OrdinalIgnoreCase)))

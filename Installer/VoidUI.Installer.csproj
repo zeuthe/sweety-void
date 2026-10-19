@@ -15,6 +15,12 @@
 
   <PropertyGroup>
     <PayloadZip Condition="'$(PayloadZip)' == ''">$(MSBuildThisFileDirectory)payload.zip</PayloadZip>
+    <!-- SlimBuild=true builds the uninstaller variant: same wizard code, no
+         app payload embedded, so the binary weighs ~15 MB instead of ~120 MB. -->
+    <SlimBuild Condition="'$(SlimBuild)' == ''">false</SlimBuild>
+    <!-- Path to the slim uninstaller exe; when present, the full installer
+         embeds it and drops it into the install folder as Uninstall.exe. -->
+    <UninstallerExe Condition="'$(UninstallerExe)' == ''"></UninstallerExe>
   </PropertyGroup>
 
   <ItemGroup>
@@ -28,8 +34,13 @@
     <AvaloniaResource Include="..\assets\logo.ico" Link="assets/logo.ico" />
   </ItemGroup>
 
-  <ItemGroup Condition="Exists('$(PayloadZip)')">
+  <ItemGroup Condition="'$(SlimBuild)' != 'true' and Exists('$(PayloadZip)')">
     <EmbeddedResource Include="$(PayloadZip)" LogicalName="payload.zip" />
+  </ItemGroup>
+
+  <!-- Full installer carries the slim uninstaller to drop at install time. -->
+  <ItemGroup Condition="'$(UninstallerExe)' != '' and Exists('$(UninstallerExe)')">
+    <EmbeddedResource Include="$(UninstallerExe)" LogicalName="uninstaller.exe" />
   </ItemGroup>
 
 </Project>
