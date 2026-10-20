@@ -255,7 +255,10 @@ namespace VoidUI.Services
                 FontSize = CrosshairGeometry.SymbolFontSize(state.Size),
                 Foreground = brush,
                 Opacity = state.Opacity / 100.0,
-                TextAlignment = TextAlignment.Center
+                TextAlignment = TextAlignment.Center,
+                // Fallback chain: symbols the base font lacks render from
+                // Segoe UI Symbol/Emoji instead of empty boxes.
+                FontFamily = new FontFamily("Segoe UI, Segoe UI Symbol, Segoe UI Emoji")
             };
         }
 

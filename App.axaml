@@ -19,7 +19,10 @@
     <Application.Resources>
         <ResourceDictionary>
             
-            <FontFamily x:Key="AppFontFamily">Consolas, Cascadia Mono, Courier New, monospace</FontFamily>
+            <!-- The trailing Segoe UI families are glyph fallbacks: exotic
+                 crosshair symbols and foreign player names render properly
+                 instead of tofu boxes. -->
+            <FontFamily x:Key="AppFontFamily">Consolas, Cascadia Mono, Courier New, monospace, Segoe UI Symbol, Segoe UI Emoji</FontFamily>
             <CornerRadius x:Key="BtnCorner">0</CornerRadius>
 
             <SolidColorBrush x:Key="BtnFace">#17171a</SolidColorBrush>

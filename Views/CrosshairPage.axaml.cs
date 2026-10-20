@@ -1335,6 +1335,8 @@ public partial class CrosshairPage : UserControl
         {
             var name = names[i];
             var btn = new Button { Content = labels[i], MinWidth = 42, Height = 28, Tag = name, FontSize = 11 };
+            // Stable automation id for UI tests (content labels like "S" are ambiguous).
+            AutomationProperties.SetAutomationId(btn, $"Preset_{name}");
             btn.Classes.Add("pill");
             if (name == current) { btn.Classes.Add("active"); btn.BorderBrush = new SolidColorBrush(Color.Parse("#7c5cfc")); }
             btn.Click += (_, _) =>
