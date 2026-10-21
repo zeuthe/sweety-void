@@ -494,7 +494,7 @@ public partial class TrackerPage : UserControl
 
         // Oldest first (Seconds ascending, stable so hits inside a fight keep
         // their order), each row numbered by its hit-series.
-        var rows = new List<(string Main, string Block, string Area, CombatLogEntry E)>();
+        var rows = new List<(string Main, string Block, string Area, bool Head, CombatLogEntry E)>();
         var hit = 0;
         var prevSec = double.MaxValue;
         foreach (var e in entries.OrderBy(x => x.Seconds))
@@ -516,10 +516,11 @@ public partial class TrackerPage : UserControl
                         : hpBlock.Length > 0 ? hpBlock
                         : dist;
 
+            var isHead = e.Area.Equals("head", StringComparison.OrdinalIgnoreCase);
             var area = e.Area == "N/A" ? "" : e.Area;
-            if (e.IsKill) area = area.ToUpperInvariant();
+            if (e.IsKill || isHead) area = area.ToUpperInvariant();
 
-            rows.Add((main, block, area, e));
+            rows.Add((main, block, area, isHead, e));
         }
 
         // Fixed columns: every row pads its main part so the block starts at
@@ -540,8 +541,12 @@ public partial class TrackerPage : UserControl
             var area = r.Area.Length > 0 ? " " + r.Area : "";
             text.Inlines.Add(new Run(main + block + area + "\n")
             {
+                // Headshots carry their own system colors: mine are dark green,
+                // the enemy's are dark red.
                 Foreground = new SolidColorBrush(Color.Parse(
-                    r.E.IsKill ? "#f87171"
+                    r.Head && r.E.Outgoing ? "#16a34a"
+                    : r.Head && r.E.Incoming ? "#b91c1c"
+                    : r.E.IsKill ? "#f87171"
                     : r.E.Incoming ? "#e8737a"
                     : r.E.SelfInflicted ? "#f59e0b"
                     : r.E.Outgoing ? "#4ade80"
