@@ -491,53 +491,88 @@ public partial class TrackerPage : UserControl
 
 
         text.Inlines.Clear();
-        foreach (var e in entries.OrderByDescending(x => x.Seconds))
-            text.Inlines.Add(BuildCombatLine(e));
+
+        // Oldest first (Seconds ascending, stable so hits inside a fight keep
+        // their order), each row numbered by its hit-series.
+        var rows = new List<(string Main, string Block, string Area, CombatLogEntry E)>();
+        var hit = 0;
+        var prevSec = double.MaxValue;
+        foreach (var e in entries.OrderBy(x => x.Seconds))
+        {
+            // A pause longer than a minute — or a new session — starts a new series.
+            hit = e.Seconds - prevSec > 60.0 || e.Seconds < prevSec ? 1 : hit + 1;
+            prevSec = e.Seconds;
+
+            var weapon = string.IsNullOrEmpty(e.Weapon) || e.Weapon == "N/A" ? "" : " with " + e.Weapon;
+            var badge = e.IsKill ? " KILL" : e.IsDown ? " DOWN" : "";
+            var newHp = string.IsNullOrEmpty(e.NewHp) ? "" : " " + FormatHp(e.NewHp);
+            var main = $"({hit}) {e.Attacker}{weapon} > {e.Target}{newHp}{badge}";
+
+            var hpBlock = !string.IsNullOrEmpty(e.OldHp) && !string.IsNullOrEmpty(e.NewHp)
+                ? $"{FormatHp(e.OldHp)}>{FormatHp(e.NewHp)}"
+                : "";
+            var dist = FormatDistance(e.Distance);
+            var block = hpBlock.Length > 0 && dist.Length > 0 ? hpBlock + "/" + dist
+                        : hpBlock.Length > 0 ? hpBlock
+                        : dist;
+
+            var area = e.Area == "N/A" ? "" : e.Area;
+            if (e.IsKill) area = area.ToUpperInvariant();
+
+            rows.Add((main, block, area, e));
+        }
+
+        // Fixed columns: every row pads its main part so the block starts at
+        // one offset, with a label above the block.
+        var mainWidth = Math.Max(rows.Max(r => r.Main.Length), 30);
+        var blockWidth = rows.Max(r => r.Block.Length);
+
+        text.Inlines.Add(new Run(new string(' ', mainWidth + 2) + "OLD>NEW/DIST")
+        {
+            Foreground = new SolidColorBrush(Color.Parse("#5c5c66"))
+        });
+        text.Inlines.Add(new Run("\n"));
+
+        foreach (var r in rows)
+        {
+            var main = r.Main.PadRight(mainWidth + 2);
+            var block = r.Block.PadRight(blockWidth + 1);
+            var area = r.Area.Length > 0 ? " " + r.Area : "";
+            text.Inlines.Add(new Run(main + block + area + "\n")
+            {
+                Foreground = new SolidColorBrush(Color.Parse(
+                    r.E.IsKill ? "#f87171"
+                    : r.E.Incoming ? "#e8737a"
+                    : r.E.SelfInflicted ? "#f59e0b"
+                    : r.E.Outgoing ? "#4ade80"
+                    : "#5c5c66"))
+            });
+        }
 
         var scroll = this.FindControl<ScrollViewer>("CombatLogScroll");
-        scroll?.ScrollToHome();
+        scroll?.ScrollToEnd();
     }
 
 
-    private static Run BuildCombatLine(CombatLogEntry e)
+    private static string FormatHp(string hp)
     {
-        var sb = new StringBuilder();
+        if (string.IsNullOrWhiteSpace(hp)) return "";
+        return double.TryParse(hp, System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out var v)
+            ? ((int)Math.Round(v)).ToString()
+            : hp;
+    }
 
-
-        var time = e.Time.Length > 9 ? e.Time.Substring(0, 9) : e.Time.PadRight(9);
-        sb.Append(time);
-
-
-        sb.Append(e.Incoming ? "◀ " : e.Outgoing ? "▶ " : "  ");
-
-        sb.Append(e.Attacker).Append(" → ").Append(e.Target);
-
-        if (!string.IsNullOrEmpty(e.Weapon) && e.Weapon != "N/A")
-            sb.Append(" ").Append(e.Weapon);
-
-        if (!string.IsNullOrEmpty(e.Area) && e.Area != "N/A")
-            sb.Append(" ").Append(e.Area);
-
-        if (!string.IsNullOrEmpty(e.Distance))
-            sb.Append(" ").Append(e.Distance);
-
-        sb.Append(' ').Append(e.OldHp).Append("→").Append(e.NewHp);
-
-        if (e.IsKill) sb.Append("  KILL");
-        else if (e.IsDown) sb.Append("  down");
-
-
-        sb.Append('\n');
-
-        return new Run(sb.ToString())
-        {
-            Foreground = new SolidColorBrush(Color.Parse(
-                e.IsKill ? "#f87171"
-                : e.Incoming ? "#e8737a"
-                : e.SelfInflicted ? "#f59e0b"
-                : e.Outgoing ? "#4ade80"
-                : "#5c5c66"))
-        };
+    private static string FormatDistance(string distance)
+    {
+        if (string.IsNullOrWhiteSpace(distance) || distance == "N/A") return "";
+        var t = distance.EndsWith("m", StringComparison.OrdinalIgnoreCase)
+            ? distance.Substring(0, distance.Length - 1)
+            : distance;
+        return double.TryParse(t, System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out var v)
+            ? ((int)Math.Round(v)) + "m"
+            : distance;
     }
 
     private void RenderServers(List<ServerInfo> servers)

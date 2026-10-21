@@ -50,6 +50,12 @@ namespace VoidUI.Services
             @"^\d+(\.\d+)?s\s",
             RegexOptions.Compiled);
 
+
+        // Every combat row in output_log.txt is wrapped in <color=#RRGGBB>…</color>.
+        private static readonly Regex ColorTagRx = new(
+            @"^<color=[^>]+>|</color>\s*$",
+            RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
         public event Action<List<ServerInfo>> OnDataUpdated;
         public event Action<string> OnStatusChanged;
 
@@ -456,10 +462,17 @@ namespace VoidUI.Services
                 }
 
                 if (_combatCols == null || _combatCols.Length < 10) continue;
-                if (!CombatTimeRx.IsMatch(line)) continue;
+
+                // Rows carry a leading <color=…> tag, but Rust aligns the data
+                // columns with the header as if the tag were part of the row —
+                // so slice with offsets compensated by the tag length.
+                var tag = ColorTagRx.Match(line);
+                var shift = tag.Success ? tag.Length : 0;
+                var bare = shift > 0 ? line.Substring(shift) : line;
+                if (!CombatTimeRx.IsMatch(bare)) continue;
                 if (!_seenCombatLines.Add(line)) continue;
 
-                _combatLog.Add(ReadCombatRow(line, _combatCols));
+                _combatLog.Add(ReadCombatRow(bare, _combatCols, shift));
             }
 
             if (_combatLog.Count > MaxCombatLog)
@@ -486,27 +499,28 @@ namespace VoidUI.Services
 
 
         /// distance old_hp new_hp info …</summary>
-        private static CombatLogEntry ReadCombatRow(string line, int[] cols) => new()
+        private static CombatLogEntry ReadCombatRow(string line, int[] cols, int shift) => new()
         {
             Raw = line,
-            Time = SliceField(line, cols, 0),
-            Attacker = SliceField(line, cols, 1),
-            Target = SliceField(line, cols, 2),
-            Weapon = ShortWeapon(SliceField(line, cols, 3)),
-            Ammo = SliceField(line, cols, 4),
-            Area = SliceField(line, cols, 5),
-            Distance = SliceField(line, cols, 6),
-            OldHp = SliceField(line, cols, 7),
-            NewHp = SliceField(line, cols, 8),
-            Info = SliceField(line, cols, 9)
+            Time = SliceField(line, cols, 0, shift),
+            Attacker = SliceField(line, cols, 1, shift),
+            Target = SliceField(line, cols, 2, shift),
+            Weapon = ShortWeapon(SliceField(line, cols, 3, shift)),
+            Ammo = SliceField(line, cols, 4, shift),
+            Area = SliceField(line, cols, 5, shift),
+            Distance = SliceField(line, cols, 6, shift),
+            OldHp = SliceField(line, cols, 7, shift),
+            NewHp = SliceField(line, cols, 8, shift),
+            Info = SliceField(line, cols, 9, shift)
         };
 
-        private static string SliceField(string line, int[] cols, int index)
+        private static string SliceField(string line, int[] cols, int index, int shift)
         {
             if (index >= cols.Length) return "";
-            var start = cols[index];
+            var start = cols[index] - shift;
+            if (start < 0) start = 0;
             if (start >= line.Length) return "";
-            var end = index + 1 < cols.Length ? cols[index + 1] : line.Length;
+            var end = index + 1 < cols.Length ? cols[index + 1] - shift : line.Length;
             if (end > line.Length) end = line.Length;
             if (end <= start) return "";
             return line.Substring(start, end - start).Trim();
