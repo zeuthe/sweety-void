@@ -59,6 +59,7 @@ public partial class TrackerPage : UserControl
         }
 
         WireParseModeStrip();
+        WireCombatTable();
         WireSplitter();
 
         // A fresh page must reflect a parser that is already running - the
@@ -190,7 +191,26 @@ public partial class TrackerPage : UserControl
             var height = grid.Bounds.Height;
             if (height <= 0) return;
 
-            _splitRatio = Math.Clamp(e.GetPosition(grid).Y / height, 0.15, 0.85);
+            var ratio = Math.Clamp(e.GetPosition(grid).Y / height, 0.03, 0.97);
+            // Dragging near the top edge collapses "who killed me" down to its
+            // header so the combat log can sit flush against it; pulling the
+            // handle back down restores the normal split.
+            if (_topCollapsed)
+            {
+                if (ratio <= 0.08) return;
+                _topCollapsed = false;
+            }
+            else if (ratio <= 0.06 && !_bottomCollapsed)
+            {
+                _topCollapsed = true;
+                ApplySplit();
+                return;
+            }
+            else if (_bottomCollapsed)
+            {
+                _bottomCollapsed = false;
+            }
+            _splitRatio = ratio;
             ApplySplit();
         };
         handle.PointerReleased += (_, e) =>
@@ -227,14 +247,15 @@ public partial class TrackerPage : UserControl
         var rows = grid.RowDefinitions;
         if (_topCollapsed)
         {
-
-            rows[1].Height = GridLength.Auto;
+            // A pixel height (not Auto): the section keeps only its header and
+            // cannot swallow the other panel with unbounded content height.
+            rows[1].Height = new GridLength(SectionHeaderHeight("KillMeHeader"), GridUnitType.Pixel);
             rows[3].Height = new GridLength(1, GridUnitType.Star);
         }
         else if (_bottomCollapsed)
         {
             rows[1].Height = new GridLength(1, GridUnitType.Star);
-            rows[3].Height = GridLength.Auto;
+            rows[3].Height = new GridLength(SectionHeaderHeight("CombatLogHeader"), GridUnitType.Pixel);
         }
         else
         {
@@ -254,6 +275,15 @@ public partial class TrackerPage : UserControl
     {
         var btn = this.FindControl<Button>(name);
         if (btn != null) btn.Content = glyph;
+    }
+
+    /// <summary>Height of a section header strip (for collapsed rows), with a
+    /// sensible fallback before the first layout pass.</summary>
+    private double SectionHeaderHeight(string name)
+    {
+        var border = this.FindControl<Border>(name);
+        var h = border?.Bounds.Height ?? 0;
+        return h > 0 ? h : 31;
     }
 
     private static readonly string[] IntervalBoxNames =
@@ -471,30 +501,65 @@ public partial class TrackerPage : UserControl
     }
 
 
+    // One column spec for the header and every row keeps them aligned at any
+    // window width: hit series, who, weapon, target(+KILL/DOWN), damage,
+    // hp old>new, distance, body area. The name columns keep a minimum width
+    // so they never collapse into pure ellipsis on narrow windows.
+    private const string CombatLogCols = "38,2*,2*,2*,48,66,46,58";
+    private const double CombatLogNameMinWidth = 64;
+
+    private void WireCombatTable()
+    {
+        var header = this.FindControl<Grid>("CombatLogHeaderGrid");
+        if (header != null) header.ColumnDefinitions = ParseCombatColumns();
+    }
+
+    private static ColumnDefinitions ParseCombatColumns()
+    {
+        var defs = new ColumnDefinitions();
+        foreach (var part in CombatLogCols.Split(','))
+        {
+            if (part.EndsWith("*"))
+            {
+                var star = new ColumnDefinition(
+                    new GridLength(double.Parse(part.Substring(0, part.Length - 1),
+                        System.Globalization.CultureInfo.InvariantCulture), GridUnitType.Star));
+                star.MinWidth = CombatLogNameMinWidth;
+                defs.Add(star);
+            }
+            else
+                defs.Add(new ColumnDefinition(
+                    new GridLength(double.Parse(part,
+                        System.Globalization.CultureInfo.InvariantCulture), GridUnitType.Pixel)));
+        }
+        return defs;
+    }
+
     private void RenderCombatLog()
     {
-        var text = this.FindControl<TextBlock>("CombatLogText");
-        if (text == null) return;
+        var panel = this.FindControl<StackPanel>("CombatLogPanel");
+        if (panel == null) return;
+        var header = this.FindControl<Grid>("CombatLogHeaderGrid");
 
         var entries = _trackerService.CombatLog;
-        text.Inlines ??= new InlineCollection();
+        panel.Children.Clear();
 
         if (entries.Count == 0)
         {
-            text.Inlines.Clear();
-            text.Inlines.Add(new Run("combatlog events will be decoded here")
+            if (header != null) header.IsVisible = false;
+            panel.Children.Add(new TextBlock
             {
+                Text = "combatlog events will be decoded here",
+                FontFamily = CombatFont,
+                FontSize = 10,
                 Foreground = new SolidColorBrush(Color.Parse("#5c5c66"))
             });
             return;
         }
-
-
-        text.Inlines.Clear();
+        if (header != null) header.IsVisible = true;
 
         // Oldest first (Seconds ascending, stable so hits inside a fight keep
         // their order), each row numbered by its hit-series.
-        var rows = new List<(string Main, string Block, string Area, bool Head, CombatLogEntry E)>();
         var hit = 0;
         var prevSec = double.MaxValue;
         foreach (var e in entries.OrderBy(x => x.Seconds))
@@ -503,59 +568,93 @@ public partial class TrackerPage : UserControl
             hit = e.Seconds - prevSec > 60.0 || e.Seconds < prevSec ? 1 : hit + 1;
             prevSec = e.Seconds;
 
-            var weapon = string.IsNullOrEmpty(e.Weapon) || e.Weapon == "N/A" ? "" : " with " + e.Weapon;
-            var badge = e.IsKill ? " KILL" : e.IsDown ? " DOWN" : "";
-            var newHp = string.IsNullOrEmpty(e.NewHp) ? "" : " " + FormatHp(e.NewHp);
-            var main = $"({hit}) {e.Attacker}{weapon} > {e.Target}{newHp}{badge}";
-
-            var hpBlock = !string.IsNullOrEmpty(e.OldHp) && !string.IsNullOrEmpty(e.NewHp)
-                ? $"{FormatHp(e.OldHp)}>{FormatHp(e.NewHp)}"
-                : "";
-            var dist = FormatDistance(e.Distance);
-            var block = hpBlock.Length > 0 && dist.Length > 0 ? hpBlock + "/" + dist
-                        : hpBlock.Length > 0 ? hpBlock
-                        : dist;
-
             var isHead = e.Area.Equals("head", StringComparison.OrdinalIgnoreCase);
             var area = e.Area == "N/A" ? "" : e.Area;
             if (e.IsKill || isHead) area = area.ToUpperInvariant();
 
-            rows.Add((main, block, area, isHead, e));
-        }
+            var weapon = string.IsNullOrEmpty(e.Weapon) || e.Weapon == "N/A" ? "—" : e.Weapon;
+            var badge = e.IsKill ? " KILL" : e.IsDown ? " DOWN" : "";
+            var hp = !string.IsNullOrEmpty(e.OldHp) && !string.IsNullOrEmpty(e.NewHp)
+                ? $"{FormatHp(e.OldHp)}>{FormatHp(e.NewHp)}"
+                : "";
 
-        // Fixed columns: every row pads its main part so the block starts at
-        // one offset, with a label above the block.
-        var mainWidth = Math.Max(rows.Max(r => r.Main.Length), 30);
-        var blockWidth = rows.Max(r => r.Block.Length);
+            // Headshots carry their own system colors: mine are dark green,
+            // the enemy's are dark red.
+            var brush = new SolidColorBrush(Color.Parse(
+                isHead && e.Outgoing ? "#16a34a"
+                : isHead && e.Incoming ? "#b91c1c"
+                : e.IsKill ? "#f87171"
+                : e.Incoming ? "#e8737a"
+                : e.SelfInflicted ? "#f59e0b"
+                : e.Outgoing ? "#4ade80"
+                : "#5c5c66"));
 
-        text.Inlines.Add(new Run(new string(' ', mainWidth + 2) + "OLD>NEW/DIST")
-        {
-            Foreground = new SolidColorBrush(Color.Parse("#5c5c66"))
-        });
-        text.Inlines.Add(new Run("\n"));
-
-        foreach (var r in rows)
-        {
-            var main = r.Main.PadRight(mainWidth + 2);
-            var block = r.Block.PadRight(blockWidth + 1);
-            var area = r.Area.Length > 0 ? " " + r.Area : "";
-            text.Inlines.Add(new Run(main + block + area + "\n")
-            {
-                // Headshots carry their own system colors: mine are dark green,
-                // the enemy's are dark red.
-                Foreground = new SolidColorBrush(Color.Parse(
-                    r.Head && r.E.Outgoing ? "#16a34a"
-                    : r.Head && r.E.Incoming ? "#b91c1c"
-                    : r.E.IsKill ? "#f87171"
-                    : r.E.Incoming ? "#e8737a"
-                    : r.E.SelfInflicted ? "#f59e0b"
-                    : r.E.Outgoing ? "#4ade80"
-                    : "#5c5c66"))
-            });
+            panel.Children.Add(BuildCombatRow(hit, e.Attacker, weapon, e.Target, badge,
+                FormatDmg(e), hp, FormatDistance(e.Distance), area, brush));
         }
 
         var scroll = this.FindControl<ScrollViewer>("CombatLogScroll");
         scroll?.ScrollToEnd();
+    }
+
+    private static Border BuildCombatRow(int hit, string who, string weapon, string target,
+        string badge, string dmg, string hp, string dist, string area, IBrush brush)
+    {
+        var grid = new Grid { ColumnDefinitions = ParseCombatColumns() };
+
+        grid.Children.Add(CombatCell($"({hit})", 0, brush, TextAlignment.Center));
+        grid.Children.Add(CombatCell(who, 1, brush, TextAlignment.Left));
+        grid.Children.Add(CombatCell(weapon, 2, brush, TextAlignment.Left));
+
+        var targetCell = CombatCell("", 3, brush, TextAlignment.Left);
+        targetCell.Inlines.Clear();
+        targetCell.Inlines.Add(new Run(target));
+        if (badge.Length > 0)
+            targetCell.Inlines.Add(new Run(badge) { FontWeight = FontWeight.Bold });
+        grid.Children.Add(targetCell);
+
+        grid.Children.Add(CombatCell(dmg, 4, brush, TextAlignment.Right));
+        grid.Children.Add(CombatCell(hp, 5, brush, TextAlignment.Right));
+        grid.Children.Add(CombatCell(dist, 6, brush, TextAlignment.Right));
+        grid.Children.Add(CombatCell(area, 7, brush, TextAlignment.Left));
+
+        return new Border
+        {
+            BorderBrush = new SolidColorBrush(Color.Parse("#1a1a1f")),
+            BorderThickness = new Thickness(0, 0, 0, 1),
+            Child = grid
+        };
+    }
+
+    private static readonly FontFamily CombatFont = new("Cascadia Code, Consolas, monospace");
+
+    private static TextBlock CombatCell(string text, int col, IBrush brush, TextAlignment align)
+    {
+        var tb = new TextBlock
+        {
+            Text = text,
+            Foreground = brush,
+            FontFamily = CombatFont,
+            FontSize = 10,
+            TextAlignment = align,
+            TextWrapping = TextWrapping.NoWrap,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 1, align == TextAlignment.Right ? 8 : 6, 1)
+        };
+        Grid.SetColumn(tb, col);
+        return tb;
+    }
+
+    private static string FormatDmg(CombatLogEntry e)
+    {
+        if (!double.TryParse(e.OldHp, System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var o) ||
+            !double.TryParse(e.NewHp, System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var n))
+            return "";
+        var d = (int)Math.Round(o - n);
+        return d > 0 ? "-" + d : d < 0 ? "+" + (-d) : "0";
     }
 
 

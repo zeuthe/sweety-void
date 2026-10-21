@@ -19,7 +19,7 @@
 
                         <!-- Top half: who killed me -->
                         <Grid Grid.Row="1" RowDefinitions="Auto,*">
-                            <Border Grid.Row="0" Padding="16,7" BorderBrush="{StaticResource BorderSubtle}"
+                            <Border Grid.Row="0" Name="KillMeHeader" Padding="16,7" BorderBrush="{StaticResource BorderSubtle}"
                                     BorderThickness="0,0,0,1" Background="{StaticResource SurfaceBase}">
                                 <Grid ColumnDefinitions="*,Auto,Auto">
                                     <TextBlock Grid.Column="0" Text="WHO KILLED ME" FontSize="10" FontWeight="700"
@@ -46,7 +46,7 @@
 
                         <!-- Bottom half: combat log (F1 console: combatlog) -->
                         <Grid Grid.Row="3" RowDefinitions="Auto,*">
-                            <Border Grid.Row="0" Padding="16,7" BorderBrush="{StaticResource BorderSubtle}"
+                            <Border Grid.Row="0" Name="CombatLogHeader" Padding="16,7" BorderBrush="{StaticResource BorderSubtle}"
                                     BorderThickness="0,0,0,1" Background="{StaticResource SurfaceBase}">
                                 <Grid ColumnDefinitions="*,Auto,Auto,Auto">
                                     <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="0">
@@ -69,12 +69,47 @@
                                             ToolTip.Tip="Collapse this panel — the space goes to who killed me"/>
                                 </Grid>
                             </Border>
-                            <ScrollViewer Grid.Row="1" Name="CombatLogScroll">
-                                <TextBlock Name="CombatLogText" FontFamily="Cascadia Code, Consolas, monospace"
-                                           FontSize="10" Foreground="{StaticResource TextSecondary}"
-                                           TextWrapping="NoWrap" Margin="14,8"
-                                           Text="combatlog events will be decoded here"/>
-                            </ScrollViewer>
+                            <!-- Table: the column header stays sticky above the scrolling rows -->
+                            <Grid Grid.Row="1" RowDefinitions="Auto,*">
+                                <Border Grid.Row="0" Padding="16,5" BorderBrush="{StaticResource BorderSubtle}"
+                                        BorderThickness="0,0,0,1" Background="{StaticResource SurfaceBase}">
+                                    <Grid Name="CombatLogHeaderGrid">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="38"/>
+                                            <ColumnDefinition Width="2*" MinWidth="64"/>
+                                            <ColumnDefinition Width="2*" MinWidth="64"/>
+                                            <ColumnDefinition Width="2*" MinWidth="64"/>
+                                            <ColumnDefinition Width="48"/>
+                                            <ColumnDefinition Width="66"/>
+                                            <ColumnDefinition Width="46"/>
+                                            <ColumnDefinition Width="58"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="HIT" FontSize="9" FontWeight="700"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                   Foreground="{StaticResource TextTertiary}"/>
+                                        <TextBlock Grid.Column="1" Text="WHO" FontSize="9" FontWeight="700"
+                                                   VerticalAlignment="Center" Foreground="{StaticResource TextTertiary}"/>
+                                        <TextBlock Grid.Column="2" Text="WEAPON" FontSize="9" FontWeight="700"
+                                                   VerticalAlignment="Center" Foreground="{StaticResource TextTertiary}"/>
+                                        <TextBlock Grid.Column="3" Text="TARGET" FontSize="9" FontWeight="700"
+                                                   VerticalAlignment="Center" Foreground="{StaticResource TextTertiary}"/>
+                                        <TextBlock Grid.Column="4" Text="DMG" FontSize="9" FontWeight="700" TextAlignment="Right"
+                                                   Margin="0,0,8,0" VerticalAlignment="Center"
+                                                   Foreground="{StaticResource TextTertiary}"/>
+                                        <TextBlock Grid.Column="5" Text="HP" FontSize="9" FontWeight="700" TextAlignment="Right"
+                                                   Margin="0,0,8,0" VerticalAlignment="Center"
+                                                   Foreground="{StaticResource TextTertiary}"/>
+                                        <TextBlock Grid.Column="6" Text="DIST" FontSize="9" FontWeight="700" TextAlignment="Right"
+                                                   Margin="0,0,8,0" VerticalAlignment="Center"
+                                                   Foreground="{StaticResource TextTertiary}"/>
+                                        <TextBlock Grid.Column="7" Text="AREA" FontSize="9" FontWeight="700"
+                                                   VerticalAlignment="Center" Foreground="{StaticResource TextTertiary}"/>
+                                    </Grid>
+                                </Border>
+                                <ScrollViewer Grid.Row="1" Name="CombatLogScroll">
+                                    <StackPanel Name="CombatLogPanel" Margin="16,4" Spacing="1"/>
+                                </ScrollViewer>
+                            </Grid>
                         </Grid>
                     </Grid>
                 </Border>
