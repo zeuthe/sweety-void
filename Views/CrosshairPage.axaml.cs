@@ -200,7 +200,7 @@ public partial class CrosshairPage : UserControl
             if (string.IsNullOrEmpty(srcPath)) return;
             try
             {
-                var presetsDir = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "presets", "crosshair", "animpresets");
+                var presetsDir = UserPresets.AnimPresetsDir;
                 Directory.CreateDirectory(presetsDir);
                 var dstPath = System.IO.Path.Combine(presetsDir, System.IO.Path.GetFileName(srcPath));
                 File.Copy(srcPath, dstPath, true);
@@ -299,7 +299,7 @@ public partial class CrosshairPage : UserControl
     {
         SetupButton("SaveConfigBtn", () =>
         {
-            var configsDir = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "presets", "crosshair", "configs");
+            var configsDir = UserPresets.ConfigsDir;
             Directory.CreateDirectory(configsDir);
 
             var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
@@ -335,7 +335,7 @@ public partial class CrosshairPage : UserControl
         if (panel == null) return;
         panel.Children.Clear();
 
-        var configsDir = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "presets", "crosshair", "configs");
+        var configsDir = UserPresets.ConfigsDir;
         if (!Directory.Exists(configsDir)) return;
 
         foreach (var file in Directory.GetFiles(configsDir, "*.json"))
@@ -1384,7 +1384,7 @@ public partial class CrosshairPage : UserControl
 
     private void RebuildRainbowThemes()
     {
-        var presetsDir = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "presets", "crosshair", "animpresets");
+        var presetsDir = UserPresets.AnimPresetsDir;
         if (!Directory.Exists(presetsDir)) return;
 
         var names = new System.Collections.Generic.List<string>();

@@ -66,6 +66,10 @@ public partial class MainWindow : Window
 
     private void OnLoaded(object? sender, RoutedEventArgs e)
     {
+        // Presets moved out of the install dir so updates can never clobber
+        // them; sync anything an older install (or a new release) left behind.
+        Services.UserPresets.MigrateFromInstallDir();
+
         SetupDrag();
         WireTabButtons();
         WireControlButtons();
@@ -270,7 +274,7 @@ public partial class MainWindow : Window
 
         try
         {
-            var dir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "presets", "crosshair", "configs");
+            var dir = Services.UserPresets.ConfigsDir;
             if (Directory.Exists(dir))
             {
                 foreach (var file in Directory.GetFiles(dir, "*.json"))
