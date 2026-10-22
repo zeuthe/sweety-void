@@ -315,8 +315,11 @@ public partial class SettingsPage : UserControl
 
     private static readonly string[] FontStyleCandidates =
     {
-        "Cascadia Code", "Cascadia Mono", "Consolas", "JetBrains Mono", "Roboto Mono",
-        "Inter", "Segoe UI", "Roboto", "Arial", "Verdana", "Tahoma", "Georgia", "Courier New",
+        "Cascadia Code", "Cascadia Mono", "Consolas", "JetBrains Mono", "Fira Code",
+        "Source Code Pro", "IBM Plex Mono", "Ubuntu Mono", "Space Mono", "Inconsolata",
+        "Roboto Mono", "Inter", "Segoe UI", "Segoe UI Variable", "Roboto", "Arial",
+        "Verdana", "Tahoma", "Trebuchet MS", "Georgia", "Cambria", "Calibri",
+        "Franklin Gothic Medium", "Bahnschrift", "Courier New",
     };
 
     private void SetupStyles()
