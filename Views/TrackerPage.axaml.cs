@@ -67,6 +67,26 @@ public partial class TrackerPage : UserControl
         _isMonitoring = _trackerService.IsMonitoring;
         SyncRunButton();
 
+        // Permanent mode means "always parse": if the parser is not running
+        // (app was restarted, or a one-shot finished), re-entering the page
+        // resumes it instead of making the user press RUN again.
+        var cs0 = _settings.GetSettings().Tracker;
+        if (!_trackerService.IsMonitoring && cs0.ParseMode == TrackerService.ModePermanent)
+        {
+            _activeMode = cs0.ParseMode;
+            _trackerService.StartMonitoring(cs0.ParseMode, IntervalSecondsTotal(), cs0.IntervalSpread);
+            _isMonitoring = true;
+            SyncRunButton();
+        }
+
+        // A fresh page must show what the service already knows instead of
+        // waiting for the next parse tick — that wait felt like "the info is
+        // lost and nothing parses until I press RUN".
+        var servers = _trackerService.Servers.ToList();
+        _lastServers = servers;
+        RenderServers(servers);
+        RenderCombatLog();
+
         var clearLogBtn = this.FindControl<Button>("ClearLogBtn");
         if (clearLogBtn != null) clearLogBtn.Click += (_, _) =>
         {
@@ -502,10 +522,11 @@ public partial class TrackerPage : UserControl
 
 
     // One column spec for the header and every row keeps them aligned at any
-    // window width: hit series, who, weapon, target(+KILL/DOWN), damage,
-    // hp old>new, distance, body area. The name columns keep a minimum width
-    // so they never collapse into pure ellipsis on narrow windows.
-    private const string CombatLogCols = "38,2*,2*,2*,48,66,46,58";
+    // window width: hit series (mine only, per target), who, weapon,
+    // target(+KILL/DEAD/DOWN), target's new hp, damage, then the hp pair
+    // split in place as old > new, distance, body area. The name columns keep
+    // a minimum width so they never collapse into pure ellipsis.
+    private const string CombatLogCols = "38,2*,2*,2*,44,46,40,14,40,46,58";
     private const double CombatLogNameMinWidth = 64;
 
     private void WireCombatTable()
@@ -558,28 +579,40 @@ public partial class TrackerPage : UserControl
         }
         if (header != null) header.IsVisible = true;
 
-        // Oldest first (Seconds ascending, stable so hits inside a fight keep
-        // their order), each row numbered by its hit-series.
-        var hit = 0;
-        var prevSec = double.MaxValue;
+        // The hit counter is mine-only and per target: hitting patsik numbers
+        // 1,2,3…, hitting bich starts its own 1,2,…. A pause longer than a
+        // minute — or a new session — restarts that player's series.
+        var hits = new Dictionary<string, (int Count, double LastSec)>();
+
         foreach (var e in entries.OrderBy(x => x.Seconds))
         {
-            // A pause longer than a minute — or a new session — starts a new series.
-            hit = e.Seconds - prevSec > 60.0 || e.Seconds < prevSec ? 1 : hit + 1;
-            prevSec = e.Seconds;
-
             var isHead = e.Area.Equals("head", StringComparison.OrdinalIgnoreCase);
             var area = e.Area == "N/A" ? "" : e.Area;
             if (e.IsKill || isHead) area = area.ToUpperInvariant();
 
             var weapon = string.IsNullOrEmpty(e.Weapon) || e.Weapon == "N/A" ? "—" : e.Weapon;
-            var badge = e.IsKill ? " KILL" : e.IsDown ? " DOWN" : "";
-            var hp = !string.IsNullOrEmpty(e.OldHp) && !string.IsNullOrEmpty(e.NewHp)
-                ? $"{FormatHp(e.OldHp)}>{FormatHp(e.NewHp)}"
-                : "";
+            // My kill is KILL; every kill where I end up dead (someone's or my
+            // own) is DEAD.
+            var badge = e.IsKill ? (e.Outgoing ? " KILL" : " DEAD") : e.IsDown ? " DOWN" : "";
+
+            var who = _trackerService.DisplayName(e.Attacker);
+            var target = _trackerService.DisplayName(e.Target);
+
+            string hitLabel;
+            if (e.Outgoing)
+            {
+                var key = target.ToLowerInvariant();
+                hits.TryGetValue(key, out var st);
+                var count = e.Seconds - st.LastSec > 60.0 || e.Seconds < st.LastSec ? 1 : st.Count + 1;
+                hits[key] = (count, e.Seconds);
+                hitLabel = $"({count})";
+            }
+            else hitLabel = "—";
+
+            var newHp = FormatHp(e.NewHp);
 
             // Headshots carry their own system colors: mine are dark green,
-            // the enemy's are dark red.
+            // the enemy's are dark red. My headshot also lights the row up.
             var brush = new SolidColorBrush(Color.Parse(
                 isHead && e.Outgoing ? "#16a34a"
                 : isHead && e.Incoming ? "#b91c1c"
@@ -588,21 +621,26 @@ public partial class TrackerPage : UserControl
                 : e.SelfInflicted ? "#f59e0b"
                 : e.Outgoing ? "#4ade80"
                 : "#5c5c66"));
+            var rowBg = isHead && e.Outgoing
+                ? new SolidColorBrush(Color.Parse("#132b1a"))
+                : null;
 
-            panel.Children.Add(BuildCombatRow(hit, e.Attacker, weapon, e.Target, badge,
-                FormatDmg(e), hp, FormatDistance(e.Distance), area, brush));
+            panel.Children.Add(BuildCombatRow(hitLabel, who, weapon, target, badge,
+                newHp, FormatDmg(e), FormatHp(e.OldHp), newHp,
+                FormatDistance(e.Distance), area, brush, rowBg));
         }
 
         var scroll = this.FindControl<ScrollViewer>("CombatLogScroll");
         scroll?.ScrollToEnd();
     }
 
-    private static Border BuildCombatRow(int hit, string who, string weapon, string target,
-        string badge, string dmg, string hp, string dist, string area, IBrush brush)
+    private static Border BuildCombatRow(string hit, string who, string weapon, string target,
+        string badge, string newHp, string dmg, string hpOld, string hpNew,
+        string dist, string area, IBrush brush, IBrush? rowBg)
     {
         var grid = new Grid { ColumnDefinitions = ParseCombatColumns() };
 
-        grid.Children.Add(CombatCell($"({hit})", 0, brush, TextAlignment.Center));
+        grid.Children.Add(CombatCell(hit, 0, brush, TextAlignment.Center));
         grid.Children.Add(CombatCell(who, 1, brush, TextAlignment.Left));
         grid.Children.Add(CombatCell(weapon, 2, brush, TextAlignment.Left));
 
@@ -613,15 +651,27 @@ public partial class TrackerPage : UserControl
             targetCell.Inlines.Add(new Run(badge) { FontWeight = FontWeight.Bold });
         grid.Children.Add(targetCell);
 
-        grid.Children.Add(CombatCell(dmg, 4, brush, TextAlignment.Right));
-        grid.Children.Add(CombatCell(hp, 5, brush, TextAlignment.Right));
-        grid.Children.Add(CombatCell(dist, 6, brush, TextAlignment.Right));
-        grid.Children.Add(CombatCell(area, 7, brush, TextAlignment.Left));
+        grid.Children.Add(CombatCell(newHp, 4, brush, TextAlignment.Right));
+
+        var dmgCell = CombatCell(dmg, 5, brush, TextAlignment.Right);
+        // A "+" damage value means the target healed between the hits.
+        if (dmg.StartsWith("+", StringComparison.Ordinal))
+            ToolTip.SetTip(dmgCell, "Apparently healed");
+        grid.Children.Add(dmgCell);
+
+        grid.Children.Add(CombatCell(hpOld, 6, brush, TextAlignment.Right));
+        grid.Children.Add(CombatCell(
+            !string.IsNullOrEmpty(hpOld) && !string.IsNullOrEmpty(hpNew) ? ">" : "",
+            7, brush, TextAlignment.Center));
+        grid.Children.Add(CombatCell(hpNew, 8, brush, TextAlignment.Right));
+        grid.Children.Add(CombatCell(dist, 9, brush, TextAlignment.Right));
+        grid.Children.Add(CombatCell(area, 10, brush, TextAlignment.Left));
 
         return new Border
         {
             BorderBrush = new SolidColorBrush(Color.Parse("#1a1a1f")),
             BorderThickness = new Thickness(0, 0, 0, 1),
+            Background = rowBg,
             Child = grid
         };
     }
@@ -731,8 +781,8 @@ serverRow.Children.Add(serverInfo);
                 });
                 if (!string.IsNullOrEmpty(target.SteamId))
                 {
+                    targetRow.Children.Add(CreateAvatar(target.PlayerName, target.SteamId, target.AvatarUrl));
                     targetRow.Children.Add(CreateCopyableId(target.SteamId));
-                    targetRow.Children.Add(CreateSteamButton(target.PlayerName, target.SteamId));
                 }
                 targetSp.Children.Add(targetRow);
 
@@ -749,7 +799,6 @@ serverRow.Children.Add(serverInfo);
                     if (death.IsPlayer && !string.IsNullOrEmpty(death.KillerSteamId))
                     {
                         deathRow.Children.Add(CreateCopyableId(death.KillerSteamId));
-                        deathRow.Children.Add(CreateSteamButton(death.KillerName, death.KillerSteamId));
                     }
                     targetSp.Children.Add(deathRow);
                 }
@@ -1061,24 +1110,61 @@ serverRow.Children.Add(serverInfo);
         return tb;
     }
 
-    private Button CreateSteamButton(string playerName, string steamId)
+    // Avatars replace the old Steam button: click opens the profile, and only
+    // real players (entries with a SteamId) get one — NPCs like "Drowned" do not.
+    private static readonly System.Net.Http.HttpClient AvatarHttp = new() { Timeout = TimeSpan.FromSeconds(15) };
+    private readonly Dictionary<string, Avalonia.Media.Imaging.Bitmap> _avatarBitmaps = new();
+    private readonly HashSet<string> _avatarTried = new();
+
+    private Border CreateAvatar(string playerName, string steamId, string avatarUrl)
     {
-        var btn = new Button
+        var border = new Border
         {
-            Content = "⛨",
-            Height = 16,
-            MinWidth = 24,
-            Padding = new Thickness(5, 0),
-            FontSize = 9,
-            FontWeight = FontWeight.SemiBold,
+            Width = 20,
+            Height = 20,
+            CornerRadius = new CornerRadius(10),
+            ClipToBounds = true,
+            Background = new SolidColorBrush(Color.Parse("#1c1c22")),
             VerticalAlignment = VerticalAlignment.Center,
-            Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand),
-            Classes = { "pill" },
-            Opacity = 0.85
+            Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand)
         };
-        ToolTip.SetTip(btn, $"Open {playerName}'s Steam profile");
-        btn.Click += (_, _) => OpenSteamProfile(steamId);
-        return btn;
+
+        if (_avatarBitmaps.TryGetValue(steamId, out var bmp))
+        {
+            border.Child = new Image { Source = bmp, Stretch = Stretch.UniformToFill };
+        }
+        else
+        {
+            // Placeholder letter until the image arrives.
+            border.Child = new TextBlock
+            {
+                Text = string.IsNullOrEmpty(playerName) ? "?" : playerName.Substring(0, 1).ToUpperInvariant(),
+                FontSize = 10,
+                Foreground = new SolidColorBrush(Color.Parse("#7c5cfc")),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            if (!string.IsNullOrEmpty(avatarUrl) && _avatarTried.Add(steamId))
+                _ = LoadAvatarAsync(steamId, avatarUrl);
+        }
+
+        ToolTip.SetTip(border, $"Open {playerName}'s Steam profile");
+        border.PointerPressed += (_, _) => OpenSteamProfile(steamId);
+        return border;
+    }
+
+    private async Task LoadAvatarAsync(string steamId, string url)
+    {
+        try
+        {
+            var bytes = await AvatarHttp.GetByteArrayAsync(url);
+            using var stream = new System.IO.MemoryStream(bytes);
+            var bmp = new Avalonia.Media.Imaging.Bitmap(stream);
+            _avatarBitmaps[steamId] = bmp;
+            // Re-render picks the loaded image up; only this one changed.
+            Dispatcher.UIThread.Post(() => RenderServers(_lastServers));
+        }
+        catch { _avatarTried.Remove(steamId); /* retry on the next render */ }
     }
 
     private void OpenSteamProfile(string steamId)

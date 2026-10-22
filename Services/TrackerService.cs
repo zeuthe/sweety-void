@@ -32,6 +32,36 @@ namespace VoidUI.Services
 
         private readonly List<CombatLogEntry> _combatLog = new();
 
+        // player_1234 in the combat log is the Steam account id; real nicks are
+        // resolved through the public profile XML and cached per session.
+        private readonly Dictionary<string, string> _playerNames = new();
+        private readonly HashSet<string> _playerNamesTried = new();
+        private static readonly Regex PlayerIdRx = new(@"^player_(\d+)$", RegexOptions.Compiled);
+        private const long SteamId64Base = 76561197960265728L;
+
+        /// <summary>Best available display name for a combat-log actor:
+        /// the resolved nick for player_1234, the raw value otherwise.</summary>
+        public string DisplayName(string raw)
+        {
+            var steamId = SteamIdOf(raw);
+            if (steamId == null) return raw;
+            return _playerNames.TryGetValue(steamId, out var name) ? name : raw;
+        }
+
+        private static string? SteamIdOf(string? raw)
+        {
+            var m = PlayerIdRx.Match(raw ?? "");
+            return m.Success ? (SteamId64Base + long.Parse(m.Groups[1].Value)).ToString() : null;
+        }
+
+        private void ResolvePlayerName(string raw)
+        {
+            var steamId = SteamIdOf(raw);
+            if (steamId == null) return;
+            if (!_playerNamesTried.Add(steamId)) return;
+            _ = FetchProfileAsync(steamId);
+        }
+
 
         private readonly HashSet<string> _seenCombatLines = new();
 
@@ -283,12 +313,28 @@ namespace VoidUI.Services
             }
         }
 
-        private async Task FetchAvatarAsync(string steamId)
+        private async Task FetchAvatarAsync(string steamId) => await FetchProfileAsync(steamId);
+
+        private async Task FetchProfileAsync(string steamId)
         {
             try
             {
                 var url = $"https://steamcommunity.com/profiles/{steamId}?xml=1";
                 var response = await _http.GetStringAsync(url);
+
+                // The XML profile carries both the persona name (used to decode
+                // player_1234 rows) and the full-size avatar.
+                var nameMatch = Regex.Match(response, @"<steamID><!\[CDATA\[(.*?)\]\]></steamID>");
+                if (!nameMatch.Success)
+                    nameMatch = Regex.Match(response, @"<steamID>(.*?)</steamID>");
+                if (nameMatch.Success)
+                {
+                    var name = nameMatch.Groups[1].Value.Trim();
+                    if (!string.IsNullOrEmpty(name) &&
+                        (!_playerNames.TryGetValue(steamId, out var old) || old != name))
+                        _playerNames[steamId] = name;
+                }
+
                 var avatarMatch = Regex.Match(response, @"<avatarFull><!\[CDATA\[(.*?)\]\]></avatarFull>");
                 if (!avatarMatch.Success)
                     avatarMatch = Regex.Match(response, @"<avatarFull>(.*?)</avatarFull>");
@@ -301,9 +347,10 @@ namespace VoidUI.Services
                         foreach (var s in _servers)
                             foreach (var t in s.Targets)
                                 if (t.SteamId == steamId) t.AvatarUrl = avatarUrl;
-                        OnDataUpdated?.Invoke(_servers);
                     }
                 }
+
+                OnDataUpdated?.Invoke(_servers);
             }
             catch { }
         }
@@ -434,6 +481,10 @@ namespace VoidUI.Services
 
         public IReadOnlyList<CombatLogEntry> CombatLog => _combatLog;
 
+        // A re-entered page re-renders straight from this state instead of
+        // waiting for the next parse tick ("info lost on re-entry").
+        public IReadOnlyList<ServerInfo> Servers => _servers;
+
 
         public void ClearCombatLog()
         {
@@ -472,7 +523,13 @@ namespace VoidUI.Services
                 if (!CombatTimeRx.IsMatch(bare)) continue;
                 if (!_seenCombatLines.Add(line)) continue;
 
-                _combatLog.Add(ReadCombatRow(bare, _combatCols, shift));
+                var entry = ReadCombatRow(bare, _combatCols, shift);
+                _combatLog.Add(entry);
+
+                // Kick off a one-time profile fetch per unknown player so the
+                // row can show a real nick instead of player_1234.
+                ResolvePlayerName(entry.Attacker);
+                ResolvePlayerName(entry.Target);
             }
 
             if (_combatLog.Count > MaxCombatLog)
