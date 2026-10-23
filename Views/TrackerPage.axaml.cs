@@ -32,6 +32,13 @@ public partial class TrackerPage : UserControl
     private bool _suppressPersist;
 
     private bool _serviceWired;
+    private bool _pageAttached;
+    private bool _popWired;
+
+    // Popped-out panels: the page renders into them while they live, so the
+    // inline view and the separate windows always show the same data.
+    private TrackerPanelWindow? _killWindow;
+    private TrackerPanelWindow? _combatWindow;
 
     private DateTime _lastRunClick = DateTime.MinValue;
 
@@ -47,6 +54,7 @@ public partial class TrackerPage : UserControl
 
     private void OnLoaded(object? sender, RoutedEventArgs e)
     {
+        _pageAttached = true;
         // Loaded fires again if the page is ever re-attached; wiring twice
         // would stack duplicate click handlers (one click = two toggles of
         // the parser - the "I have to press RUN twice" symptom).
@@ -105,6 +113,15 @@ public partial class TrackerPage : UserControl
         var addSiteBtn = this.FindControl<Button>("AddSiteBtn");
         if (addSiteBtn != null) addSiteBtn.Click += (_, _) => ShowAddSiteDialog();
 
+        if (!_popWired)
+        {
+            _popWired = true;
+            var killPop = this.FindControl<Button>("KillMePopOutBtn");
+            if (killPop != null) killPop.Click += (_, _) => OpenKillWindow();
+            var combatPop = this.FindControl<Button>("CombatLogPopOutBtn");
+            if (combatPop != null) combatPop.Click += (_, _) => OpenCombatWindow();
+        }
+
         var filterBox = this.FindControl<TextBox>("TrackerFilter");
         if (filterBox != null) filterBox.TextChanged += (_, _) => ApplyFilter(filterBox.Text);
 
@@ -113,8 +130,17 @@ public partial class TrackerPage : UserControl
 
     private void OnDetachedFromVisualTree(object? sender, VisualTreeAttachmentEventArgs e)
     {
+        _pageAttached = false;
         // Navigation replaces the page instance while the service outlives it;
         // ghost subscriptions would run forever and slow every parse tick.
+        // Popped-out windows keep rendering after the page is gone, so the
+        // subscription stays alive until the last one closes.
+        if (_killWindow != null || _combatWindow != null) return;
+        UnwireService();
+    }
+
+    private void UnwireService()
+    {
         _serviceWired = false;
         _trackerService.OnDataUpdated -= OnDataUpdated;
         _trackerService.OnStatusChanged -= OnStatusChanged;
@@ -125,6 +151,75 @@ public partial class TrackerPage : UserControl
     {
         _filter = text?.Trim().ToLowerInvariant() ?? "";
         RenderServers(_lastServers);
+    }
+
+    // ── Popped-out panels ──
+    // One window per panel: re-clicking the arrow just focuses the existing
+    // window, closing it drops the reference and the render loop follows.
+    private void OpenKillWindow()
+    {
+        if (_killWindow != null) { _killWindow.Activate(); return; }
+        var win = new TrackerPanelWindow("Who killed me", 460, 560);
+        _killWindow = win;
+        win.Closed += (_, _) =>
+        {
+            _killWindow = null;
+            if (!_pageAttached && _combatWindow == null) UnwireService();
+        };
+        ShowPanelWindow(win);
+        RenderServersInto(win.Body, _lastServers);
+    }
+
+    private void OpenCombatWindow()
+    {
+        if (_combatWindow != null) { _combatWindow.Activate(); return; }
+        var win = new TrackerPanelWindow("Combat log", 860, 420, BuildCombatTableHeader());
+        _combatWindow = win;
+        win.Closed += (_, _) =>
+        {
+            _combatWindow = null;
+            if (!_pageAttached && _killWindow == null) UnwireService();
+        };
+        ShowPanelWindow(win);
+        RenderCombatLogInto(_combatWindow);
+    }
+
+    private void ShowPanelWindow(TrackerPanelWindow win)
+    {
+        var owner = TopLevel.GetTopLevel(this) as Window;
+        if (owner != null) win.Show(owner);
+        else win.Show();
+    }
+
+    private static Grid BuildCombatTableHeader()
+    {
+        var header = new Grid { ColumnDefinitions = ParseCombatColumns() };
+        var labels = new[]
+        {
+            ("HIT", 0, TextAlignment.Center), ("WHO", 1, TextAlignment.Left),
+            ("WEAPON", 2, TextAlignment.Left), ("TARGET", 3, TextAlignment.Left),
+            ("NEW HP", 4, TextAlignment.Right), ("DMG", 5, TextAlignment.Right),
+            ("OLD", 6, TextAlignment.Right), (">", 7, TextAlignment.Center),
+            ("NEW", 8, TextAlignment.Right), ("DIST", 9, TextAlignment.Right),
+            ("AREA", 10, TextAlignment.Left)
+        };
+        foreach (var (text, col, align) in labels)
+        {
+            header.Children.Add(new TextBlock
+            {
+                Text = text,
+                FontSize = 9,
+                FontWeight = FontWeight.Bold,
+                TextAlignment = align,
+                HorizontalAlignment = align == TextAlignment.Left
+                    ? HorizontalAlignment.Left : align == TextAlignment.Right
+                    ? HorizontalAlignment.Right : HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                Foreground = new SolidColorBrush(Color.Parse("#5c5c66"))
+            });
+            Grid.SetColumn(header.Children[^1], col);
+        }
+        return header;
     }
 
     private string ResolveSiteUrl(TrackedSite site)
@@ -565,9 +660,29 @@ public partial class TrackerPage : UserControl
         var entries = _trackerService.CombatLog;
         panel.Children.Clear();
 
+        bool empty = entries.Count == 0;
+        if (header != null) header.IsVisible = !empty;
+        FillCombatPanel(panel, entries);
+
+        var scroll = this.FindControl<ScrollViewer>("CombatLogScroll");
+        if (!empty) scroll?.ScrollToEnd();
+
+        if (_combatWindow != null) RenderCombatLogInto(_combatWindow);
+    }
+
+    private void RenderCombatLogInto(TrackerPanelWindow win)
+    {
+        var entries = _trackerService.CombatLog;
+        win.SetHeaderVisible(entries.Count > 0);
+        win.Body.Children.Clear();
+        FillCombatPanel(win.Body, entries);
+        if (entries.Count > 0) win.ScrollToEnd();
+    }
+
+    private void FillCombatPanel(StackPanel panel, IReadOnlyList<CombatLogEntry> entries)
+    {
         if (entries.Count == 0)
         {
-            if (header != null) header.IsVisible = false;
             panel.Children.Add(new TextBlock
             {
                 Text = "combatlog events will be decoded here",
@@ -577,7 +692,6 @@ public partial class TrackerPage : UserControl
             });
             return;
         }
-        if (header != null) header.IsVisible = true;
 
         // The hit counter is mine-only and per target: hitting patsik numbers
         // 1,2,3…, hitting bich starts its own 1,2,…. A pause longer than a
@@ -629,9 +743,6 @@ public partial class TrackerPage : UserControl
                 newHp, FormatDmg(e), FormatHp(e.OldHp), newHp,
                 FormatDistance(e.Distance), area, brush, rowBg));
         }
-
-        var scroll = this.FindControl<ScrollViewer>("CombatLogScroll");
-        scroll?.ScrollToEnd();
     }
 
     private static Border BuildCombatRow(string hit, string who, string weapon, string target,
@@ -732,7 +843,33 @@ public partial class TrackerPage : UserControl
     private void RenderServers(List<ServerInfo> servers)
     {
         var panel = this.FindControl<StackPanel>("ServersPanel");
-        if (panel == null) return;
+        if (panel != null) RenderServersInto(panel, servers);
+        if (_killWindow != null) RenderServersInto(_killWindow.Body, servers);
+
+        _logBuffer.Clear();
+        foreach (var server in servers)
+        {
+            _logBuffer.AppendLine($"[SERVER] {server.ServerName} ({server.ServerIp})");
+
+
+
+
+            foreach (var death in server.Targets
+                         .SelectMany(t => t.DeathHistory)
+                         .OrderByDescending(d => d.Timestamp)
+                         .Take(200))
+            {
+                var steamId = death.IsPlayer && !string.IsNullOrEmpty(death.KillerSteamId)
+                    ? $" ({death.KillerSteamId})"
+                    : "";
+                _logBuffer.AppendLine($"  [{death.Timestamp}] Killed by {death.KillerName}{steamId}");
+            }
+        }
+        if (_logBuffer.Length > 0) UpdateLog(_logBuffer.ToString());
+    }
+
+    private void RenderServersInto(StackPanel panel, List<ServerInfo> servers)
+    {
         panel.Children.Clear();
 
         bool hasFilter = _filter.Length > 0;
@@ -772,18 +909,19 @@ serverRow.Children.Add(serverInfo);
             {
                 var targetSp = new StackPanel { Spacing = 2, Margin = new Thickness(12, 4, 0, 0) };
 
-                var targetRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+                var targetRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+                targetRow.VerticalAlignment = VerticalAlignment.Center;
+                if (!string.IsNullOrEmpty(target.SteamId))
+                    targetRow.Children.Add(CreateAvatar(target.PlayerName, target.SteamId, target.AvatarUrl));
                 targetRow.Children.Add(new TextBlock
                 {
                     Text = $"{target.PlayerName} — Killed me {target.TimesKilledMe}x",
                     Foreground = new SolidColorBrush(Color.Parse("#ededef")),
-                    FontSize = 11
+                    FontSize = 11,
+                    VerticalAlignment = VerticalAlignment.Center
                 });
                 if (!string.IsNullOrEmpty(target.SteamId))
-                {
-                    targetRow.Children.Add(CreateAvatar(target.PlayerName, target.SteamId, target.AvatarUrl));
                     targetRow.Children.Add(CreateCopyableId(target.SteamId));
-                }
                 targetSp.Children.Add(targetRow);
 
                 foreach (var death in target.DeathHistory.TakeLast(3))
@@ -818,28 +956,6 @@ serverRow.Children.Add(serverInfo);
                 Margin = new Thickness(16, 14)
             });
         }
-
-        _logBuffer.Clear();
-        foreach (var server in servers)
-        {
-            _logBuffer.AppendLine($"[SERVER] {server.ServerName} ({server.ServerIp})");
-
-
-
-
-
-            foreach (var death in server.Targets
-                         .SelectMany(t => t.DeathHistory)
-                         .OrderByDescending(d => d.Timestamp)
-                         .Take(200))
-            {
-                var steamId = death.IsPlayer && !string.IsNullOrEmpty(death.KillerSteamId)
-                    ? $" ({death.KillerSteamId})"
-                    : "";
-                _logBuffer.AppendLine($"  [{death.Timestamp}] Killed by {death.KillerName}{steamId}");
-            }
-        }
-        if (_logBuffer.Length > 0) UpdateLog(_logBuffer.ToString());
     }
 
     private static bool TargetMatches(TargetPlayer target, string filter)
@@ -1120,9 +1236,9 @@ serverRow.Children.Add(serverInfo);
     {
         var border = new Border
         {
-            Width = 20,
-            Height = 20,
-            CornerRadius = new CornerRadius(10),
+            Width = 30,
+            Height = 30,
+            CornerRadius = new CornerRadius(15),
             ClipToBounds = true,
             Background = new SolidColorBrush(Color.Parse("#1c1c22")),
             VerticalAlignment = VerticalAlignment.Center,
@@ -1139,7 +1255,7 @@ serverRow.Children.Add(serverInfo);
             border.Child = new TextBlock
             {
                 Text = string.IsNullOrEmpty(playerName) ? "?" : playerName.Substring(0, 1).ToUpperInvariant(),
-                FontSize = 10,
+                FontSize = 13,
                 Foreground = new SolidColorBrush(Color.Parse("#7c5cfc")),
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center

@@ -21,13 +21,15 @@
                         <Grid Grid.Row="1" RowDefinitions="Auto,*">
                             <Border Grid.Row="0" Name="KillMeHeader" Padding="16,7" BorderBrush="{StaticResource BorderSubtle}"
                                     BorderThickness="0,0,0,1" Background="{StaticResource SurfaceBase}">
-                                <Grid ColumnDefinitions="*,Auto,Auto">
+                                <Grid ColumnDefinitions="*,Auto,Auto,Auto">
                                     <TextBlock Grid.Column="0" Text="WHO KILLED ME" FontSize="10" FontWeight="700"
                                                Foreground="{StaticResource TextTertiary}" VerticalAlignment="Center"/>
                                     <TextBlock Grid.Column="1" Text="track my deaths" FontSize="10" FontStyle="Italic"
                                                Foreground="{StaticResource TextTertiary}" VerticalAlignment="Center"
                                                Margin="10,0,0,0"/>
-                                    <Button Grid.Column="2" Classes="collapse" Name="KillMeCollapseBtn" Content="▲"
+                                    <Button Grid.Column="2" Classes="collapse" Name="KillMePopOutBtn" Content="↗"
+                                            ToolTip.Tip="Open in a separate window"/>
+                                    <Button Grid.Column="3" Classes="collapse" Name="KillMeCollapseBtn" Content="▲"
                                             ToolTip.Tip="Collapse this panel — the space goes to combat log"/>
                                 </Grid>
                             </Border>
@@ -48,7 +50,7 @@
                         <Grid Grid.Row="3" RowDefinitions="Auto,*">
                             <Border Grid.Row="0" Name="CombatLogHeader" Padding="16,7" BorderBrush="{StaticResource BorderSubtle}"
                                     BorderThickness="0,0,0,1" Background="{StaticResource SurfaceBase}">
-                                <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+                                <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto">
                                     <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="0">
                                         <TextBlock Text="COMBAT LOG" FontSize="10" FontWeight="700"
                                                    Foreground="{StaticResource TextTertiary}" VerticalAlignment="Center"/>
@@ -65,7 +67,9 @@
                                         <TextBlock Text="!" FontSize="10" FontWeight="700" Foreground="#f59e0b"
                                                    HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-1,0,0"/>
                                     </Border>
-                                    <Button Grid.Column="3" Classes="collapse" Name="CombatLogCollapseBtn" Content="▼"
+                                    <Button Grid.Column="3" Classes="collapse" Name="CombatLogPopOutBtn" Content="↗"
+                                            ToolTip.Tip="Open in a separate window"/>
+                                    <Button Grid.Column="4" Classes="collapse" Name="CombatLogCollapseBtn" Content="▼"
                                             ToolTip.Tip="Collapse this panel — the space goes to who killed me"/>
                                 </Grid>
                             </Border>
