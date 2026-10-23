@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Controls.Shapes;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -67,19 +68,49 @@ public class TrackerPanelWindow : Window
         AutomationProperties.SetName(titleText, title);
         titleRow.Children.Add(titleText);
 
+        // "Return to the app": a downward arrow — the panel goes back into
+        // the tracker page (same as closing, but says what it does).
+        var arrowIcon = new Path
+        {
+            Data = StreamGeometry.Parse("M50,15 L50,85"),
+            Stroke = new SolidColorBrush(TextDim),
+            StrokeThickness = 8,
+            StrokeLineCap = PenLineCap.Round
+        };
+        var headIcon = new Path
+        {
+            Data = StreamGeometry.Parse("M25,65 L50,85 L75,65 Z"),
+            Fill = new SolidColorBrush(TextDim)
+        };
         var closeBtn = new Button
         {
-            Content = "✕",
             Width = 20,
             Height = 20,
             Padding = new Thickness(0),
-            FontSize = 9,
             Background = Transparent(),
             Foreground = new SolidColorBrush(TextDim),
             VerticalAlignment = VerticalAlignment.Center,
-            Cursor = new Cursor(StandardCursorType.Hand)
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Cursor = new Cursor(StandardCursorType.Hand),
+            Content = new Viewbox
+            {
+                Width = 11,
+                Height = 11,
+                Child = new Canvas { Width = 100, Height = 100, Children = { arrowIcon, headIcon } }
+            }
         };
-        ToolTip.SetTip(closeBtn, "Close window");
+        ToolTip.SetTip(closeBtn, "Return to the app");
+        AutomationProperties.SetName(closeBtn, "Return to app");
+        closeBtn.PointerEntered += (_, _) =>
+        {
+            arrowIcon.Stroke = new SolidColorBrush(TextPrimary);
+            headIcon.Fill = new SolidColorBrush(TextPrimary);
+        };
+        closeBtn.PointerExited += (_, _) =>
+        {
+            arrowIcon.Stroke = new SolidColorBrush(TextDim);
+            headIcon.Fill = new SolidColorBrush(TextDim);
+        };
         closeBtn.Click += (_, _) => Close();
         titleRow.Children.Add(closeBtn);
         titleBar.Child = titleRow;

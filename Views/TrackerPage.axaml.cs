@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Documents;
 using Avalonia.Input;
@@ -219,8 +220,10 @@ public partial class TrackerPage : UserControl
     private void SetPopTip(string name, bool poppedOut)
     {
         var btn = this.FindControl<Button>(name);
-        if (btn != null) ToolTip.SetTip(btn,
-            poppedOut ? "Return the panel to the app" : "Open in a separate window");
+        if (btn == null) return;
+        var text = poppedOut ? "Return the panel to the app" : "Open in a separate window";
+        ToolTip.SetTip(btn, text);
+        AutomationProperties.SetName(btn, text);
     }
 
     private void ShowPanelWindow(TrackerPanelWindow win)

@@ -27,8 +27,20 @@
                                     <TextBlock Grid.Column="1" Text="track my deaths" FontSize="10" FontStyle="Italic"
                                                Foreground="{StaticResource TextTertiary}" VerticalAlignment="Center"
                                                Margin="10,0,0,0"/>
-                                    <Button Grid.Column="2" Classes="collapse" Name="KillMePopOutBtn" Content="↗"
-                                            ToolTip.Tip="Open in a separate window"/>
+                                    <Button Grid.Column="2" Classes="collapse pop" Name="KillMePopOutBtn"
+                                            AutomationProperties.Name="Open in a separate window"
+                                            ToolTip.Tip="Open in a separate window">
+                                        <!-- Pop-out: square with an arrow leaving it -->
+                                        <Viewbox Width="12" Height="12">
+                                            <Canvas Width="100" Height="100">
+                                                <Path Classes="ico-stroke" StrokeThickness="6"
+                                                      Data="M15,30 H45 Q50,30 50,35 V65 Q50,70 45,70 H15 Q10,70 10,65 V35 Q10,30 15,30 Z"/>
+                                                <Path Classes="ico-stroke" StrokeThickness="6" StrokeLineCap="Round"
+                                                      Data="M50,50 L80,50"/>
+                                                <Path Classes="ico-fill" Data="M70,35 L85,50 L70,65 Z"/>
+                                            </Canvas>
+                                        </Viewbox>
+                                    </Button>
                                     <Button Grid.Column="3" Classes="collapse" Name="KillMeCollapseBtn" Content="▲"
                                             ToolTip.Tip="Collapse this panel — the space goes to combat log"/>
                                 </Grid>
@@ -67,8 +79,20 @@
                                         <TextBlock Text="!" FontSize="10" FontWeight="700" Foreground="#f59e0b"
                                                    HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-1,0,0"/>
                                     </Border>
-                                    <Button Grid.Column="3" Classes="collapse" Name="CombatLogPopOutBtn" Content="↗"
-                                            ToolTip.Tip="Open in a separate window"/>
+                                    <Button Grid.Column="3" Classes="collapse pop" Name="CombatLogPopOutBtn"
+                                            AutomationProperties.Name="Open in a separate window"
+                                            ToolTip.Tip="Open in a separate window">
+                                        <!-- Pop-out: square with an arrow leaving it -->
+                                        <Viewbox Width="12" Height="12">
+                                            <Canvas Width="100" Height="100">
+                                                <Path Classes="ico-stroke" StrokeThickness="6"
+                                                      Data="M15,30 H45 Q50,30 50,35 V65 Q50,70 45,70 H15 Q10,70 10,65 V35 Q10,30 15,30 Z"/>
+                                                <Path Classes="ico-stroke" StrokeThickness="6" StrokeLineCap="Round"
+                                                      Data="M50,50 L80,50"/>
+                                                <Path Classes="ico-fill" Data="M70,35 L85,50 L70,65 Z"/>
+                                            </Canvas>
+                                        </Viewbox>
+                                    </Button>
                                     <Button Grid.Column="4" Classes="collapse" Name="CombatLogCollapseBtn" Content="▼"
                                             ToolTip.Tip="Collapse this panel — the space goes to who killed me"/>
                                 </Grid>
@@ -322,6 +346,20 @@
         <Style Selector="Button.collapse:pointerover /template/ ContentPresenter">
             <Setter Property="Background" Value="{StaticResource SurfaceHigh}"/>
             <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+        </Style>
+
+        <!-- Pop-out icon (square + arrow): follows the button's text color -->
+        <Style Selector="Button.pop Path.ico-stroke">
+            <Setter Property="Stroke" Value="{StaticResource TextTertiary}"/>
+        </Style>
+        <Style Selector="Button.pop Path.ico-fill">
+            <Setter Property="Fill" Value="{StaticResource TextTertiary}"/>
+        </Style>
+        <Style Selector="Button.pop:pointerover Path.ico-stroke">
+            <Setter Property="Stroke" Value="{StaticResource TextPrimary}"/>
+        </Style>
+        <Style Selector="Button.pop:pointerover Path.ico-fill">
+            <Setter Property="Fill" Value="{StaticResource TextPrimary}"/>
         </Style>
 
         
