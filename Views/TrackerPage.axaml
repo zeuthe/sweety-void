@@ -33,7 +33,7 @@
                                             ToolTip.Tip="Collapse this panel — the space goes to combat log"/>
                                 </Grid>
                             </Border>
-                            <ScrollViewer Grid.Row="1">
+                            <ScrollViewer Grid.Row="1" Name="KillMeScroll">
                                 <StackPanel Name="ServersPanel" Spacing="0"/>
                             </ScrollViewer>
                         </Grid>
@@ -74,7 +74,7 @@
                                 </Grid>
                             </Border>
                             <!-- Table: the column header stays sticky above the scrolling rows -->
-                            <Grid Grid.Row="1" RowDefinitions="Auto,*">
+                            <Grid Grid.Row="1" Name="CombatTableGrid" RowDefinitions="Auto,*">
                                 <Border Grid.Row="0" Padding="16,5" BorderBrush="{StaticResource BorderSubtle}"
                                         BorderThickness="0,0,0,1" Background="{StaticResource SurfaceBase}">
                                     <Grid Name="CombatLogHeaderGrid">

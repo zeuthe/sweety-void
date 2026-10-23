@@ -37,6 +37,9 @@ public class TrackerPanelWindow : Window
         Background = new SolidColorBrush(PageBg);
         CanResize = true;
         SystemDecorations = SystemDecorations.None;
+        // Always above every other window (main app included) — the user pops
+        // the panel out to watch it while doing something else.
+        Topmost = true;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
         AutomationProperties.SetAutomationId(this, $"TrackerWindow{title.Replace(" ", "")}");
 

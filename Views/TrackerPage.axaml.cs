@@ -32,13 +32,14 @@ public partial class TrackerPage : UserControl
     private bool _suppressPersist;
 
     private bool _serviceWired;
-    private bool _pageAttached;
     private bool _popWired;
 
-    // Popped-out panels: the page renders into them while they live, so the
-    // inline view and the separate windows always show the same data.
-    private TrackerPanelWindow? _killWindow;
-    private TrackerPanelWindow? _combatWindow;
+    // Popped-out panels: static, because these windows outlive page instances
+    // across navigation — the window stays open while the page is swapped.
+    private static TrackerPanelWindow? _killWindow;
+    private static TrackerPanelWindow? _combatWindow;
+    private static TrackerPage? _attached;   // the page instance currently on screen
+    private static TrackerPage? _wiredOwner; // the single service subscriber among page instances
 
     private DateTime _lastRunClick = DateTime.MinValue;
 
@@ -54,17 +55,13 @@ public partial class TrackerPage : UserControl
 
     private void OnLoaded(object? sender, RoutedEventArgs e)
     {
-        _pageAttached = true;
+        _attached = this;
         // Loaded fires again if the page is ever re-attached; wiring twice
         // would stack duplicate click handlers (one click = two toggles of
         // the parser - the "I have to press RUN twice" symptom).
-        if (!_serviceWired)
-        {
-            _serviceWired = true;
-            _trackerService.OnDataUpdated += OnDataUpdated;
-            _trackerService.OnStatusChanged += OnStatusChanged;
-            _trackerService.OnParseFinished += OnParseFinished;
-        }
+        // Popped-out windows outlive page instances, so subscription ownership
+        // is transferred to the page that is on screen now.
+        WireAsOwner();
 
         WireParseModeStrip();
         WireCombatTable();
@@ -94,6 +91,9 @@ public partial class TrackerPage : UserControl
         _lastServers = servers;
         RenderServers(servers);
         RenderCombatLog();
+        // Re-apply pop-out state: this page instance may be new while the
+        // windows opened by an older instance are still on screen.
+        OnPopOutChanged();
 
         var clearLogBtn = this.FindControl<Button>("ClearLogBtn");
         if (clearLogBtn != null) clearLogBtn.Click += (_, _) =>
@@ -130,7 +130,7 @@ public partial class TrackerPage : UserControl
 
     private void OnDetachedFromVisualTree(object? sender, VisualTreeAttachmentEventArgs e)
     {
-        _pageAttached = false;
+        if (_attached == this) _attached = null;
         // Navigation replaces the page instance while the service outlives it;
         // ghost subscriptions would run forever and slow every parse tick.
         // Popped-out windows keep rendering after the page is gone, so the
@@ -139,9 +139,25 @@ public partial class TrackerPage : UserControl
         UnwireService();
     }
 
+    /// <summary>Become the one instance that listens to the tracker service.
+    /// Popped-out windows let an older detached instance stay subscribed, so a
+    /// freshly opened page takes the role over instead of stacking a second
+    /// subscription on top of the old one.</summary>
+    private void WireAsOwner()
+    {
+        if (_wiredOwner == this) return;
+        _wiredOwner?.UnwireService();
+        _wiredOwner = this;
+        _serviceWired = true;
+        _trackerService.OnDataUpdated += OnDataUpdated;
+        _trackerService.OnStatusChanged += OnStatusChanged;
+        _trackerService.OnParseFinished += OnParseFinished;
+    }
+
     private void UnwireService()
     {
         _serviceWired = false;
+        if (_wiredOwner == this) _wiredOwner = null;
         _trackerService.OnDataUpdated -= OnDataUpdated;
         _trackerService.OnStatusChanged -= OnStatusChanged;
         _trackerService.OnParseFinished -= OnParseFinished;
@@ -154,34 +170,57 @@ public partial class TrackerPage : UserControl
     }
 
     // ── Popped-out panels ──
-    // One window per panel: re-clicking the arrow just focuses the existing
-    // window, closing it drops the reference and the render loop follows.
+    // One window per panel, the ↗ in the panel header is a toggle: it moves
+    // the panel into a separate window (the inline copy collapses to the
+    // header) and clicking it again — or the window's ✕ — brings the panel
+    // back into the app. Windows are topmost: they stay above every window.
     private void OpenKillWindow()
     {
-        if (_killWindow != null) { _killWindow.Activate(); return; }
+        if (_killWindow != null) { _killWindow.Close(); return; }
         var win = new TrackerPanelWindow("Who killed me", 460, 560);
         _killWindow = win;
         win.Closed += (_, _) =>
         {
             _killWindow = null;
-            if (!_pageAttached && _combatWindow == null) UnwireService();
+            _attached?.OnPopOutChanged();
+            if (_attached == null && _combatWindow == null) _wiredOwner?.UnwireService();
         };
         ShowPanelWindow(win);
         RenderServersInto(win.Body, _lastServers);
+        OnPopOutChanged();
     }
 
     private void OpenCombatWindow()
     {
-        if (_combatWindow != null) { _combatWindow.Activate(); return; }
+        if (_combatWindow != null) { _combatWindow.Close(); return; }
         var win = new TrackerPanelWindow("Combat log", 860, 420, BuildCombatTableHeader());
         _combatWindow = win;
         win.Closed += (_, _) =>
         {
             _combatWindow = null;
-            if (!_pageAttached && _killWindow == null) UnwireService();
+            _attached?.OnPopOutChanged();
+            if (_attached == null && _killWindow == null) _wiredOwner?.UnwireService();
         };
         ShowPanelWindow(win);
         RenderCombatLogInto(_combatWindow);
+        OnPopOutChanged();
+    }
+
+    /// <summary>Pop-out state changed: re-apply the split (a popped panel
+    /// collapses to its header, the space goes to the other one) and flip the
+    /// ↗ tooltips between "open" and "return to the app".</summary>
+    private void OnPopOutChanged()
+    {
+        SetPopTip("KillMePopOutBtn", _killWindow != null);
+        SetPopTip("CombatLogPopOutBtn", _combatWindow != null);
+        ApplySplit();
+    }
+
+    private void SetPopTip(string name, bool poppedOut)
+    {
+        var btn = this.FindControl<Button>(name);
+        if (btn != null) ToolTip.SetTip(btn,
+            poppedOut ? "Return the panel to the app" : "Open in a separate window");
     }
 
     private void ShowPanelWindow(TrackerPanelWindow win)
@@ -360,7 +399,26 @@ public partial class TrackerPage : UserControl
         if (grid == null || grid.RowDefinitions.Count < 4) return;
 
         var rows = grid.RowDefinitions;
-        if (_topCollapsed)
+
+        // A panel popped into its own window leaves only its header strip (with
+        // the ↗ return button) behind — the space goes to the panel that is
+        // still in the app.
+        var killScroll = this.FindControl<ScrollViewer>("KillMeScroll");
+        if (killScroll != null) killScroll.IsVisible = _killWindow == null;
+        var combatTable = this.FindControl<Grid>("CombatTableGrid");
+        if (combatTable != null) combatTable.IsVisible = _combatWindow == null;
+
+        if (_killWindow != null)
+        {
+            rows[1].Height = new GridLength(SectionHeaderHeight("KillMeHeader"), GridUnitType.Pixel);
+            rows[3].Height = new GridLength(1, GridUnitType.Star);
+        }
+        else if (_combatWindow != null)
+        {
+            rows[1].Height = new GridLength(1, GridUnitType.Star);
+            rows[3].Height = new GridLength(SectionHeaderHeight("CombatLogHeader"), GridUnitType.Pixel);
+        }
+        else if (_topCollapsed)
         {
             // A pixel height (not Auto): the section keeps only its header and
             // cannot swallow the other panel with unbounded content height.
@@ -379,7 +437,8 @@ public partial class TrackerPage : UserControl
         }
 
         var handle = this.FindControl<Border>("SplitHandle");
-        if (handle != null) handle.IsVisible = !_topCollapsed && !_bottomCollapsed;
+        if (handle != null) handle.IsVisible =
+            !_topCollapsed && !_bottomCollapsed && _killWindow == null && _combatWindow == null;
 
 
         SetArrow("KillMeCollapseBtn", _topCollapsed ? "▼" : "▲");
