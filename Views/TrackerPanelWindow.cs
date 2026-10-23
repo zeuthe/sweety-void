@@ -67,38 +67,106 @@ public class TrackerPanelWindow : Window
         };
         AutomationProperties.SetName(titleText, title);
         titleRow.Children.Add(titleText);
+        Grid.SetColumn(titleText, 0);
 
-        // "Return to the app": text button (a down-arrow icon read poorly here)
-        // — closes the window and puts the panel back into the tracker page.
-        var closeBtn = new Button
+        // Right side mirrors the browser mini-player: pop-out glyph (returns
+        // the panel into the tracker page) + a close cross.
+        var btnCol = new StackPanel
         {
-            Content = "Return to app",
-            Padding = new Thickness(10, 4),
-            FontSize = 10,
-            FontWeight = FontWeight.SemiBold,
+            Orientation = Orientation.Horizontal,
+            Spacing = 2,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+
+        var strokeDim = new SolidColorBrush(TextDim);
+        var strokeHot = new SolidColorBrush(TextPrimary);
+        var outline = new Path
+        {
+            Data = StreamGeometry.Parse("M3.8,2.75 H13.25 V13.25 H2.75 V6.6"),
+            Stroke = strokeDim,
+            StrokeThickness = 1.5,
+            StrokeLineCap = PenLineCap.Round
+        };
+        var shaft = new Path
+        {
+            Data = StreamGeometry.Parse("M1.9,1.9 L7.2,7.2"),
+            Stroke = strokeDim,
+            StrokeThickness = 1.5,
+            StrokeLineCap = PenLineCap.Round
+        };
+        var head = new Path
+        {
+            Data = StreamGeometry.Parse("M8.3,5.2 V8.3 H5.2 Z"),
+            Fill = strokeDim
+        };
+        var corner = new Path
+        {
+            Data = StreamGeometry.Parse("M8.6,8.6 H13.25 V13.25 H8.6 Z"),
+            Fill = strokeDim
+        };
+        var glyph = new Canvas { Width = 16, Height = 16 };
+        glyph.Children.Add(outline);
+        glyph.Children.Add(shaft);
+        glyph.Children.Add(head);
+        glyph.Children.Add(corner);
+
+        var returnBtn = new Button
+        {
+            Content = new Viewbox { Width = 12, Height = 12, Child = glyph },
+            Width = 22,
+            Height = 22,
+            Padding = new Thickness(0),
             Background = Transparent(),
-            BorderBrush = new SolidColorBrush(BorderCol),
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(6),
-            Foreground = new SolidColorBrush(TextDim),
+            Foreground = strokeDim,
             VerticalAlignment = VerticalAlignment.Center,
-            HorizontalAlignment = HorizontalAlignment.Right,
             Cursor = new Cursor(StandardCursorType.Hand)
         };
-        ToolTip.SetTip(closeBtn, "Return to the app");
-        AutomationProperties.SetName(closeBtn, "Return to app");
+        ToolTip.SetTip(returnBtn, "Return to the app");
+        AutomationProperties.SetName(returnBtn, "Return to the app");
+        void Hot(bool on)
+        {
+            var b = on ? strokeHot : strokeDim;
+            outline.Stroke = b; shaft.Stroke = b; head.Fill = b; corner.Fill = b;
+            returnBtn.Foreground = b;
+        }
+        returnBtn.PointerEntered += (_, _) => Hot(true);
+        returnBtn.PointerExited += (_, _) => Hot(false);
+        returnBtn.Click += (_, _) => Close();
+        btnCol.Children.Add(returnBtn);
+
+        var closeBtn = new Button
+        {
+            Content = "✕",
+            Width = 22,
+            Height = 22,
+            Padding = new Thickness(0),
+            FontSize = 9,
+            Background = Transparent(),
+            Foreground = strokeDim,
+            VerticalAlignment = VerticalAlignment.Center,
+            Cursor = new Cursor(StandardCursorType.Hand)
+        };
+        ToolTip.SetTip(closeBtn, "Close window");
+        AutomationProperties.SetName(closeBtn, "Close window");
         closeBtn.PointerEntered += (_, _) =>
         {
-            closeBtn.Foreground = new SolidColorBrush(TextPrimary);
-            closeBtn.Background = new SolidColorBrush(TitleBg);
+            closeBtn.Foreground = strokeHot;
         };
         closeBtn.PointerExited += (_, _) =>
         {
-            closeBtn.Foreground = new SolidColorBrush(TextDim);
-            closeBtn.Background = new SolidColorBrush(Colors.Transparent);
+            closeBtn.Foreground = strokeDim;
         };
         closeBtn.Click += (_, _) => Close();
-        titleRow.Children.Add(closeBtn);
+        btnCol.Children.Add(closeBtn);
+
+        var btnHost = new Border
+        {
+            Child = btnCol,
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Right
+        };
+        titleRow.Children.Add(btnHost);
+        Grid.SetColumn(btnHost, 1);
         titleBar.Child = titleRow;
 
         // The whole strip moves the window (Avalonia handles it here, no Win32).

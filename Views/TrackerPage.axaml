@@ -30,10 +30,17 @@
                                     <Button Grid.Column="2" Classes="collapse pop" Name="KillMePopOutBtn"
                                             AutomationProperties.Name="Open in a separate window"
                                             ToolTip.Tip="Open in a separate window">
-                                        <!-- Pop-out: Spotify-style "open in a new window" glyph -->
+                                        <!-- Pop-out: mini-player style (box, arrow flying in, filled corner) -->
                                         <Viewbox Width="13" Height="13" Stretch="Uniform">
-                                            <Path Classes="ico-fill"
-                                                  Data="M1 2.75A.75.75 0 0 1 1.75 2H7v1.5H2.5v11h10.219V9h1.5v6.25a.75.75 0 0 1-.75.75H1.75a.75.75 0 0 1-.75-.75zM15 1v4.993a.75.75 0 1 1-1.5 0V3.56L8.78 8.28a.75.75 0 0 1-1.06-1.06l4.72-4.72h-2.433a.75.75 0 0 1 0-1.5z"/>
+                                            <Canvas Width="16" Height="16">
+                                                <Path Classes="ico-stroke" StrokeThickness="1.5"
+                                                      StrokeLineCap="Round"
+                                                      Data="M3.8,2.75 H13.25 V13.25 H2.75 V6.6"/>
+                                                <Path Classes="ico-stroke" StrokeThickness="1.5" StrokeLineCap="Round"
+                                                      Data="M1.9,1.9 L7.2,7.2"/>
+                                                <Path Classes="ico-fill" Data="M8.3,5.2 V8.3 H5.2 Z"/>
+                                                <Path Classes="ico-fill" Data="M8.6,8.6 H13.25 V13.25 H8.6 Z"/>
+                                            </Canvas>
                                         </Viewbox>
                                     </Button>
                                     <Button Grid.Column="3" Classes="collapse" Name="KillMeCollapseBtn" Content="▲"
@@ -77,10 +84,17 @@
                                     <Button Grid.Column="3" Classes="collapse pop" Name="CombatLogPopOutBtn"
                                             AutomationProperties.Name="Open in a separate window"
                                             ToolTip.Tip="Open in a separate window">
-                                        <!-- Pop-out: Spotify-style "open in a new window" glyph -->
+                                        <!-- Pop-out: mini-player style (box, arrow flying in, filled corner) -->
                                         <Viewbox Width="13" Height="13" Stretch="Uniform">
-                                            <Path Classes="ico-fill"
-                                                  Data="M1 2.75A.75.75 0 0 1 1.75 2H7v1.5H2.5v11h10.219V9h1.5v6.25a.75.75 0 0 1-.75.75H1.75a.75.75 0 0 1-.75-.75zM15 1v4.993a.75.75 0 1 1-1.5 0V3.56L8.78 8.28a.75.75 0 0 1-1.06-1.06l4.72-4.72h-2.433a.75.75 0 0 1 0-1.5z"/>
+                                            <Canvas Width="16" Height="16">
+                                                <Path Classes="ico-stroke" StrokeThickness="1.5"
+                                                      StrokeLineCap="Round"
+                                                      Data="M3.8,2.75 H13.25 V13.25 H2.75 V6.6"/>
+                                                <Path Classes="ico-stroke" StrokeThickness="1.5" StrokeLineCap="Round"
+                                                      Data="M1.9,1.9 L7.2,7.2"/>
+                                                <Path Classes="ico-fill" Data="M8.3,5.2 V8.3 H5.2 Z"/>
+                                                <Path Classes="ico-fill" Data="M8.6,8.6 H13.25 V13.25 H8.6 Z"/>
+                                            </Canvas>
                                         </Viewbox>
                                     </Button>
                                     <Button Grid.Column="4" Classes="collapse" Name="CombatLogCollapseBtn" Content="▼"
@@ -338,9 +352,15 @@
             <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
         </Style>
 
-        <!-- Pop-out icon (Spotify-style): follows the button's text color -->
+        <!-- Pop-out icon (Edge/Spotify mini-player style): follows the button's text color -->
+        <Style Selector="Button.pop Path.ico-stroke">
+            <Setter Property="Stroke" Value="{StaticResource TextTertiary}"/>
+        </Style>
         <Style Selector="Button.pop Path.ico-fill">
             <Setter Property="Fill" Value="{StaticResource TextTertiary}"/>
+        </Style>
+        <Style Selector="Button.pop:pointerover Path.ico-stroke">
+            <Setter Property="Stroke" Value="{StaticResource TextPrimary}"/>
         </Style>
         <Style Selector="Button.pop:pointerover Path.ico-fill">
             <Setter Property="Fill" Value="{StaticResource TextPrimary}"/>
