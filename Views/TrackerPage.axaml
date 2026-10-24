@@ -27,22 +27,28 @@
                                     <TextBlock Grid.Column="1" Text="track my deaths" FontSize="10" FontStyle="Italic"
                                                Foreground="{StaticResource TextTertiary}" VerticalAlignment="Center"
                                                Margin="10,0,0,0"/>
-                                    <Button Grid.Column="2" Classes="collapse pop" Name="KillMePopOutBtn"
-                                            AutomationProperties.Name="Open in a separate window"
-                                            ToolTip.Tip="Open in a separate window">
-                                        <!-- Pop-out: mini-player style (box, arrow flying in, filled corner) -->
-                                        <Viewbox Width="13" Height="13" Stretch="Uniform">
-                                            <Canvas Width="16" Height="16">
-                                                <Path Classes="ico-stroke" StrokeThickness="1.5"
-                                                      StrokeLineCap="Round"
-                                                      Data="M3.8,2.75 H13.25 V13.25 H2.75 V6.6"/>
-                                                <Path Classes="ico-stroke" StrokeThickness="1.5" StrokeLineCap="Round"
-                                                      Data="M1.9,1.9 L7.2,7.2"/>
-                                                <Path Classes="ico-fill" Data="M8.3,5.2 V8.3 H5.2 Z"/>
-                                                <Path Classes="ico-fill" Data="M8.6,8.6 H13.25 V13.25 H8.6 Z"/>
-                                            </Canvas>
-                                        </Viewbox>
-                                    </Button>
+                                    <Grid Grid.Column="2" Width="18" Height="18" Margin="8,0,0,0">
+                                        <Button Classes="collapse pop" Name="KillMePopOutBtn" Margin="0"
+                                                AutomationProperties.Name="Open in a separate window"
+                                                ToolTip.Tip="Open in a separate window">
+                                            <!-- Pop-out: mini-player glyph, arrow flies OUT through the broken corner -->
+                                            <Viewbox Width="13" Height="13" Stretch="Uniform">
+                                                <Canvas Width="16" Height="16">
+                                                    <Path Classes="ico-stroke" StrokeThickness="1.5"
+                                                          StrokeLineCap="Round"
+                                                          Data="M3.8,2.75 H13.25 V13.25 H2.75 V6.6"/>
+                                                    <Path Classes="ico-stroke" StrokeThickness="1.5" StrokeLineCap="Round"
+                                                          Data="M4.7,4.7 L7.6,7.6"/>
+                                                    <Path Classes="ico-fill" Data="M6.6,3.5 L3.5,3.5 L3.5,6.6 Z"/>
+                                                    <Path Classes="ico-fill" Data="M8.6,8.6 H13.25 V13.25 H8.6 Z"/>
+                                                </Canvas>
+                                            </Viewbox>
+                                        </Button>
+                                        <!-- Green edge sweep along the button's bottom when popping out -->
+                                        <Border Name="KillMePopSweep" Height="2" Width="0" CornerRadius="1"
+                                                IsVisible="False" VerticalAlignment="Bottom" HorizontalAlignment="Left"
+                                                Background="{StaticResource GreenDefault}"/>
+                                    </Grid>
                                     <Button Grid.Column="3" Classes="collapse" Name="KillMeCollapseBtn" Content="▲"
                                             ToolTip.Tip="Collapse this panel — the space goes to combat log"/>
                                 </Grid>
@@ -81,22 +87,28 @@
                                         <TextBlock Text="!" FontSize="10" FontWeight="700" Foreground="#f59e0b"
                                                    HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-1,0,0"/>
                                     </Border>
-                                    <Button Grid.Column="3" Classes="collapse pop" Name="CombatLogPopOutBtn"
-                                            AutomationProperties.Name="Open in a separate window"
-                                            ToolTip.Tip="Open in a separate window">
-                                        <!-- Pop-out: mini-player style (box, arrow flying in, filled corner) -->
-                                        <Viewbox Width="13" Height="13" Stretch="Uniform">
-                                            <Canvas Width="16" Height="16">
-                                                <Path Classes="ico-stroke" StrokeThickness="1.5"
-                                                      StrokeLineCap="Round"
-                                                      Data="M3.8,2.75 H13.25 V13.25 H2.75 V6.6"/>
-                                                <Path Classes="ico-stroke" StrokeThickness="1.5" StrokeLineCap="Round"
-                                                      Data="M1.9,1.9 L7.2,7.2"/>
-                                                <Path Classes="ico-fill" Data="M8.3,5.2 V8.3 H5.2 Z"/>
-                                                <Path Classes="ico-fill" Data="M8.6,8.6 H13.25 V13.25 H8.6 Z"/>
-                                            </Canvas>
-                                        </Viewbox>
-                                    </Button>
+                                    <Grid Grid.Column="3" Width="18" Height="18" Margin="8,0,0,0">
+                                        <Button Classes="collapse pop" Name="CombatLogPopOutBtn" Margin="0"
+                                                AutomationProperties.Name="Open in a separate window"
+                                                ToolTip.Tip="Open in a separate window">
+                                            <!-- Pop-out: mini-player glyph, arrow flies OUT through the broken corner -->
+                                            <Viewbox Width="13" Height="13" Stretch="Uniform">
+                                                <Canvas Width="16" Height="16">
+                                                    <Path Classes="ico-stroke" StrokeThickness="1.5"
+                                                          StrokeLineCap="Round"
+                                                          Data="M3.8,2.75 H13.25 V13.25 H2.75 V6.6"/>
+                                                    <Path Classes="ico-stroke" StrokeThickness="1.5" StrokeLineCap="Round"
+                                                          Data="M4.7,4.7 L7.6,7.6"/>
+                                                    <Path Classes="ico-fill" Data="M6.6,3.5 L3.5,3.5 L3.5,6.6 Z"/>
+                                                    <Path Classes="ico-fill" Data="M8.6,8.6 H13.25 V13.25 H8.6 Z"/>
+                                                </Canvas>
+                                            </Viewbox>
+                                        </Button>
+                                        <!-- Green edge sweep along the button's bottom when popping out -->
+                                        <Border Name="CombatLogPopSweep" Height="2" Width="0" CornerRadius="1"
+                                                IsVisible="False" VerticalAlignment="Bottom" HorizontalAlignment="Left"
+                                                Background="{StaticResource GreenDefault}"/>
+                                    </Grid>
                                     <Button Grid.Column="4" Classes="collapse" Name="CombatLogCollapseBtn" Content="▼"
                                             ToolTip.Tip="Collapse this panel — the space goes to who killed me"/>
                                 </Grid>
