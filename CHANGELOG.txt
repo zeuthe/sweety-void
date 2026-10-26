@@ -19,6 +19,9 @@
 - Fixed window transparency handling in Windows native backend
 - Various UI stability improvements
 
+### Distribution
+- **Windows installer**: `VoidUI.Setup.exe` (165.2 MB) with embedded payload and slim uninstaller (43.2 MB)
+
 ### Known Issues
 - None at this time
 
