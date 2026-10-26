@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Linq;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
@@ -5,6 +7,7 @@ using Avalonia.Controls.Shapes;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.VisualTree;
 
 namespace VoidUI.Views;
 
@@ -27,6 +30,14 @@ public class TrackerPanelWindow : Window
 
     private readonly ScrollViewer _scroll = new();
     private readonly Control? _header; // optional sticky table header (combat log)
+    private readonly Border _titleBar;
+    private readonly Border? _headerHost; // sticky header's wrapping border (combat log)
+
+    // Background-off mode: remember the fills that were hidden so they can be
+    // put back exactly as they were. Only Background changes — border lines
+    // (BorderBrush) and text are never touched.
+    private readonly Dictionary<Border, IBrush?> _rowBackgrounds = new();
+    private bool _bgOff;
 
     public TrackerPanelWindow(string title, double width, double height, Control? header = null)
     {
@@ -56,6 +67,7 @@ public class TrackerPanelWindow : Window
             BorderThickness = new Thickness(0, 0, 0, 1),
             Padding = new Thickness(14, 8)
         };
+        _titleBar = titleBar;
         var titleRow = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
         var titleText = new TextBlock
         {
@@ -69,8 +81,8 @@ public class TrackerPanelWindow : Window
         titleRow.Children.Add(titleText);
         Grid.SetColumn(titleText, 0);
 
-        // Right side mirrors the browser mini-player: pop-out glyph (returns
-        // the panel into the tracker page) + a close cross.
+        // Right side mirrors the browser mini-player title bar: the arrowed
+        // twin of the page's plain pop glyph (traced from reference art).
         var btnCol = new StackPanel
         {
             Orientation = Orientation.Horizontal,
@@ -80,41 +92,22 @@ public class TrackerPanelWindow : Window
 
         var strokeDim = new SolidColorBrush(TextDim);
         var strokeHot = new SolidColorBrush(TextPrimary);
-        var outline = new Path
+        // Return to the app: the arrowed twin of the page's plain pop glyph.
+        var glyphPath = new Path
         {
-            Data = StreamGeometry.Parse("M3.8,2.75 H13.25 V13.25 H2.75 V6.6"),
+            // Browser/mini-player style: the frame of a window with an arrow
+            // coming back INTO it (twin of the page's pop-out glyph).
+            Data = StreamGeometry.Parse("M14 4H6A2 2 0 0 0 4 6V18A2 2 0 0 0 6 20H18A2 2 0 0 0 20 18V12M21 3L12 12M12 6V12H18"),
             Stroke = strokeDim,
-            StrokeThickness = 1.5,
+            StrokeThickness = 2,
             StrokeLineCap = PenLineCap.Round
         };
-        var shaft = new Path
-        {
-            Data = StreamGeometry.Parse("M1.9,1.9 L7.2,7.2"),
-            Stroke = strokeDim,
-            StrokeThickness = 1.5,
-            StrokeLineCap = PenLineCap.Round
-        };
-        var head = new Path
-        {
-            Data = StreamGeometry.Parse("M8.3,5.2 V8.3 H5.2 Z"),
-            Fill = strokeDim
-        };
-        var corner = new Path
-        {
-            Data = StreamGeometry.Parse("M8.6,8.6 H13.25 V13.25 H8.6 Z"),
-            Fill = strokeDim
-        };
-        var glyph = new Canvas { Width = 16, Height = 16 };
-        glyph.Children.Add(outline);
-        glyph.Children.Add(shaft);
-        glyph.Children.Add(head);
-        glyph.Children.Add(corner);
 
         var returnBtn = new Button
         {
-            Content = new Viewbox { Width = 12, Height = 12, Child = glyph },
-            Width = 22,
-            Height = 22,
+            Content = new Viewbox { Width = 22, Height = 22, Child = glyphPath },
+            Width = 26,
+            Height = 26,
             Padding = new Thickness(0),
             Background = Transparent(),
             Foreground = strokeDim,
@@ -126,7 +119,7 @@ public class TrackerPanelWindow : Window
         void Hot(bool on)
         {
             var b = on ? strokeHot : strokeDim;
-            outline.Stroke = b; shaft.Stroke = b; head.Fill = b; corner.Fill = b;
+            glyphPath.Stroke = b;
             returnBtn.Foreground = b;
         }
         returnBtn.PointerEntered += (_, _) => Hot(true);
@@ -134,30 +127,78 @@ public class TrackerPanelWindow : Window
         returnBtn.Click += (_, _) => Close();
         btnCol.Children.Add(returnBtn);
 
-        var closeBtn = new Button
+        // Background toggle button: removes window background (only for this window)
+        var bgBtn = new Button
         {
-            Content = "✕",
-            Width = 22,
-            Height = 22,
+            Content = "⊘",
+            Width = 26,
+            Height = 26,
             Padding = new Thickness(0),
-            FontSize = 9,
+            FontSize = 11,
             Background = Transparent(),
             Foreground = strokeDim,
             VerticalAlignment = VerticalAlignment.Center,
             Cursor = new Cursor(StandardCursorType.Hand)
         };
-        ToolTip.SetTip(closeBtn, "Close window");
-        AutomationProperties.SetName(closeBtn, "Close window");
-        closeBtn.PointerEntered += (_, _) =>
+        ToolTip.SetTip(bgBtn, "Remove background");
+        AutomationProperties.SetName(bgBtn, "Remove background");
+        bgBtn.PointerEntered += (_, _) => bgBtn.Foreground = strokeHot;
+        bgBtn.PointerExited += (_, _) => bgBtn.Foreground = strokeDim;
+        // Every fill that gets hidden is remembered here, so switching back on
+        // restores the original brushes (rows are re-rendered often).
+        void HideFill(Border b)
         {
-            closeBtn.Foreground = strokeHot;
-        };
-        closeBtn.PointerExited += (_, _) =>
+            if (b.Background == null || _rowBackgrounds.ContainsKey(b)) return;
+            _rowBackgrounds[b] = b.Background;
+            b.Background = Brushes.Transparent;
+        }
+
+        void HideRowBackgrounds()
         {
-            closeBtn.Foreground = strokeDim;
-        };
-        closeBtn.Click += (_, _) => Close();
-        btnCol.Children.Add(closeBtn);
+            foreach (var b in Body.GetVisualDescendants().OfType<Border>().ToList())
+                HideFill(b);
+            // Rows cleared from the panel are detached — drop their entries.
+            foreach (var gone in _rowBackgrounds.Keys.Where(k => !k.IsAttachedToVisualTree()).ToList())
+                _rowBackgrounds.Remove(gone);
+        }
+
+        void RestoreRowBackgrounds()
+        {
+            foreach (var kv in _rowBackgrounds) kv.Key.Background = kv.Value;
+            _rowBackgrounds.Clear();
+        }
+
+        void ToggleBackground()
+        {
+            _bgOff = !_bgOff;
+            if (_bgOff)
+            {
+                // Without the hint Windows keeps an opaque backdrop, so just
+                // clearing Background does nothing visible.
+                TransparencyLevelHint = new[] { WindowTransparencyLevel.Transparent };
+                Background = Transparent();
+                _titleBar.Background = Transparent();
+                if (_headerHost != null) _headerHost.Background = Transparent();
+                HideRowBackgrounds();
+            }
+            else
+            {
+                RestoreRowBackgrounds();
+                Background = new SolidColorBrush(PageBg);
+                _titleBar.Background = new SolidColorBrush(TitleBg);
+                if (_headerHost != null) _headerHost.Background = new SolidColorBrush(TitleBg);
+                TransparencyLevelHint = new[] { WindowTransparencyLevel.None };
+            }
+            // Only fills change: border lines and text keep their brushes.
+            bgBtn.Foreground = _bgOff ? strokeHot : strokeDim;
+            bgBtn.Content = _bgOff ? "●" : "⊘";
+        }
+
+        bgBtn.Click += (_, _) => ToggleBackground();
+        // The page re-renders Body often (parse ticks) — new rows must lose
+        // their background too while the mode is on.
+        Body.Children.CollectionChanged += (_, _) => { if (_bgOff) HideRowBackgrounds(); };
+        btnCol.Children.Add(bgBtn);
 
         var btnHost = new Border
         {
@@ -187,6 +228,7 @@ public class TrackerPanelWindow : Window
                 BorderThickness = new Thickness(0, 0, 0, 1),
                 Child = header
             };
+            _headerHost = headerHost;
             grid.Children.Add(headerHost);
             Grid.SetRow(headerHost, 1);
         }

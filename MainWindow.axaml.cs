@@ -3,13 +3,18 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
+using Avalonia.Animation;
+using Avalonia.Animation.Easings;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
+using Avalonia.Styling;
+using Avalonia.VisualTree;
 using VoidUI.Services;
 
 namespace VoidUI;
@@ -80,6 +85,7 @@ public partial class MainWindow : Window
         NavigateTo("home");
         StartOverlay();
         StartThemeWatcher();
+        WireBell();
         StartUpdateCheck();
         WireStatusHint();
     }
@@ -160,7 +166,6 @@ public partial class MainWindow : Window
     #region Global Search
 
     private sealed record SearchEntry(string Label, string Category, string Kind, string Value);
-    private bool _searchGuard;
 
     private void WireSearch()
     {
@@ -178,16 +183,12 @@ public partial class MainWindow : Window
             if (!popup.IsOpen || list.ItemCount == 0) return;
             if (e.Key == Key.Down)
             {
-                _searchGuard = true;
                 list.SelectedIndex = Math.Min(list.SelectedIndex + 1, list.ItemCount - 1);
-                _searchGuard = false;
                 e.Handled = true;
             }
             else if (e.Key == Key.Up)
             {
-                _searchGuard = true;
                 list.SelectedIndex = Math.Max(list.SelectedIndex - 1, -1);
-                _searchGuard = false;
                 e.Handled = true;
             }
             else if (e.Key == Key.Enter && list.SelectedItem is SearchEntry entry)
@@ -198,21 +199,33 @@ public partial class MainWindow : Window
             }
         };
 
-        list.SelectionChanged += (_, _) =>
+        // Execute on pointer release instead of SelectionChanged: the first
+        // result is pre-selected (SelectedIndex = 0), so clicking it never
+        // changed the selection and the click silently did nothing.
+        list.PointerReleased += (_, e) =>
         {
-            if (_searchGuard) return;
-            if (list.SelectedItem is not SearchEntry entry) return;
+            if (e.InitialPressMouseButton != MouseButton.Left) return;
+
+            Visual? src = e.Source as Visual;
+            ListBoxItem? item = null;
+            while (src != null && item == null)
+            {
+                if (src is ListBoxItem li) item = li;
+                src = src.GetVisualParent();
+            }
+
+            if (item?.DataContext is not SearchEntry entry) return;
+
             ExecuteSearchEntry(entry);
             CloseSearchBox(box, popup, list);
+            e.Handled = true;
         };
     }
 
     private void CloseSearchBox(TextBox box, Popup popup, ListBox list)
     {
-        _searchGuard = true;
         list.SelectedItem = null;
         list.ItemsSource = null;
-        _searchGuard = false;
         popup.IsOpen = false;
         box.Text = "";
     }
@@ -228,16 +241,35 @@ public partial class MainWindow : Window
         }
 
         var ql = q.ToLowerInvariant();
-        var hits = BuildSearchIndex()
+        var hits = GetSearchIndex()
             .Where(s => s.Label.ToLowerInvariant().Contains(ql) || s.Category.ToLowerInvariant().Contains(ql))
+            // Relevance: exact match, then prefix, then substring.
+            .OrderByDescending(s => s.Label.Equals(q, StringComparison.OrdinalIgnoreCase))
+            .ThenByDescending(s => s.Label.StartsWith(q, StringComparison.OrdinalIgnoreCase))
+            .ThenBy(s => s.Label.Length)
             .Take(14)
             .ToList();
 
-        _searchGuard = true;
         list.ItemsSource = hits;
         list.SelectedIndex = hits.Count > 0 ? 0 : -1;
-        _searchGuard = false;
         popup.IsOpen = hits.Count > 0;
+    }
+
+    private List<SearchEntry>? _searchIndex;
+    private int _searchIndexVersion = -1;
+
+    /// <summary>Cached search index. Building it scans the configs directory
+    /// on disk, which used to happen on every keystroke; the version key from
+    /// UserPresets invalidates it exactly when files change.</summary>
+    private List<SearchEntry> GetSearchIndex()
+    {
+        var v = Services.UserPresets.Version;
+        if (_searchIndex == null || _searchIndexVersion != v)
+        {
+            _searchIndex = BuildSearchIndex();
+            _searchIndexVersion = v;
+        }
+        return _searchIndex;
     }
 
     private List<SearchEntry> BuildSearchIndex()
@@ -336,7 +368,7 @@ public partial class MainWindow : Window
 
     private void ExecuteSearchEntry(SearchEntry entry)
     {
-        void GoCrosshair()
+        bool GoCrosshair()
         {
             NavigateTo("crosshair");
             var content = this.FindControl<ContentControl>("PageContent");
@@ -344,7 +376,10 @@ public partial class MainWindow : Window
             {
                 if (entry.Kind == "preset") page.SelectPreset(entry.Value);
                 else page.LoadConfigFile(entry.Value);
+                return true;
             }
+            // Page wasn't created (e.g. feature disabled -> redirected home).
+            return false;
         }
 
         if (entry.Kind == "page")
@@ -353,7 +388,13 @@ public partial class MainWindow : Window
         }
         else if (entry.Kind is "preset" or "config")
         {
-            GoCrosshair();
+            // Only claim success when the crosshair page really exists;
+            // a disabled feature used to report a load that never happened.
+            if (!GoCrosshair())
+            {
+                SetStatus("Crosshair page is disabled");
+                return;
+            }
             SetStatus(entry.Kind == "preset" ? $"Preset: {entry.Value}" : $"Loaded config: {entry.Label}");
         }
         else if (entry.Kind == "theme")
@@ -744,8 +785,8 @@ public partial class MainWindow : Window
         {
             _statusTick++;
 
-
-
+            // The red notice dot no longer toggles per tick — it breathes via
+            // StartBellDotPulse (smooth fade in/out on the compositor).
 
             var busy = IsBusy;
             if (busy != _workStarted)
@@ -1163,6 +1204,7 @@ public partial class MainWindow : Window
     {
         _statusTimer?.Stop();
         _statusTimer = null;
+        StopBellDotPulse();
         base.OnClosing(e);
     }
 
@@ -1190,6 +1232,277 @@ public partial class MainWindow : Window
             var tb = this.FindControl<TextBlock>("BarStatusText");
             if (tb != null) tb.Text = text;
         });
+    }
+
+    // ── Update bell ──
+    // The bell sits right of the page status and stays quiet by itself; any
+    // update notice (available / downloading / downloaded / failed) switches
+    // the red dot on, and the status timer makes it blink. Clicking the bell
+    // opens a popup with the version, what's new and the matching action.
+
+    // After an app update the bell lights up once with a "what's new"
+    // notice; it goes out when the changelog has been opened.
+    private bool _whatsNewActive;
+
+    private static string WhatsNewSeenFile => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "VoidUI", "whats_new.seen");
+
+    private void InitWhatsNew()
+    {
+        try
+        {
+            var current = UpdateService.CurrentVersion;
+            var seen = File.Exists(WhatsNewSeenFile)
+                ? File.ReadAllText(WhatsNewSeenFile).Trim()
+                : "";
+            // No marker at all (fresh install, or the first release shipping
+            // this feature) also counts as "not read yet".
+            _whatsNewActive = seen != current;
+        }
+        catch { /* a broken marker must never block startup */ }
+    }
+
+    private void ShowChangelogWindow()
+    {
+        try { File.WriteAllText(WhatsNewSeenFile, UpdateService.CurrentVersion); } catch { }
+        _whatsNewActive = false;
+        RefreshBell();
+
+        // Open on the next dispatcher turn: clicking inside the bell popup
+        // tears it down asynchronously, and racing that teardown made the
+        // dialog lose the fight for the surface on a fast machine.
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            try { Views.ChangelogDialog.Show(TopLevel.GetTopLevel(this) as Window); }
+            catch (Exception ex) { CrashLog.Write("Changelog.Show", ex); }
+        });
+    }
+
+    private bool BellHasNotice() =>
+        _updateService.HasNotice || _updateService.Stage == UpdateStage.Failed || _whatsNewActive;
+
+    private CancellationTokenSource? _bellDotPulse;
+
+    /// <summary>Smoothly fading glow for the red notice dot: opacity breathes
+    /// 1.0 → 0.15 → 1.0 over 2s on the compositor (the previous per-tick
+    /// on/off toggle read as a harsh flash). Idempotent — a second call while
+    /// already pulsing is a no-op.</summary>
+    private void StartBellDotPulse(Border dot)
+    {
+        if (_bellDotPulse != null) return;
+
+        _bellDotPulse = new CancellationTokenSource();
+        var anim = new Animation
+        {
+            Duration = TimeSpan.FromMilliseconds(2000),
+            IterationCount = IterationCount.Infinite,
+            Easing = new SineEaseInOut(),
+            Children =
+            {
+                new KeyFrame
+                {
+                    Cue = new Cue(0.0),
+                    Setters = { new Setter(Visual.OpacityProperty, 1.0) }
+                },
+                new KeyFrame
+                {
+                    Cue = new Cue(0.5),
+                    Setters = { new Setter(Visual.OpacityProperty, 0.15) }
+                },
+                new KeyFrame
+                {
+                    Cue = new Cue(1.0),
+                    Setters = { new Setter(Visual.OpacityProperty, 1.0) }
+                }
+            }
+        };
+        // Avalonia faults this looping animation's task when the pulse is
+        // torn down ("Looping animations must not use the Run method"), and
+        // the finalizer would later rethrow it into the crash log. The dot
+        // itself animates fine (measured), so observe the fault silently.
+        _ = anim.RunAsync(dot, _bellDotPulse.Token).ContinueWith(
+            t => _ = t.Exception,
+            TaskContinuationOptions.OnlyOnFaulted);
+    }
+
+    private void StopBellDotPulse()
+    {
+        _bellDotPulse?.Cancel();
+        _bellDotPulse = null;
+    }
+
+    private void WireBell()
+    {
+        InitWhatsNew();
+
+        var bell = this.FindControl<Button>("BellBtn");
+        var popup = this.FindControl<Popup>("BellPopup");
+        if (bell != null && popup != null)
+        {
+            popup.PlacementTarget = bell;
+            bell.Click += (_, _) =>
+            {
+                if (popup.IsOpen) { popup.IsOpen = false; return; }
+                BuildBellPopup();
+                popup.IsOpen = true;
+            };
+        }
+
+        // The service raises this from download/check threads — hop to the UI.
+        _updateService.StateChanged += RefreshBell;
+        RefreshBell();
+    }
+
+    private void RefreshBell()
+    {
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            var has = BellHasNotice();
+
+            var dot = this.FindControl<Border>("BellDot");
+            if (dot != null)
+            {
+                dot.IsVisible = has;
+                if (has) StartBellDotPulse(dot);
+                else { StopBellDotPulse(); dot.Opacity = 1; }
+            }
+
+            var bell = this.FindControl<Button>("BellBtn");
+            if (bell != null)
+            {
+                // Show the live headline during an in-flight check too: without
+                // it the tooltip claimed "No update notices" before the result
+                // was even known.
+                var checking = _updateService.Stage == UpdateStage.Checking;
+                ToolTip.SetTip(bell, has || checking
+                    ? BellHeadline()
+                    : $"No update notices — v{UpdateService.CurrentVersion}");
+            }
+
+            var popup = this.FindControl<Popup>("BellPopup");
+            if (popup is { IsOpen: true }) BuildBellPopup();
+        });
+    }
+
+    /// <summary>Plain status headline — what the update stage actually is.</summary>
+    private string UpdateHeadline() => _updateService.Stage switch
+    {
+        UpdateStage.Checking => "Checking for updates…",
+        UpdateStage.UpToDate => $"You are up to date — v{UpdateService.CurrentVersion}",
+        UpdateStage.Available => $"Update v{_updateService.LatestVersion} is available",
+        UpdateStage.Downloading => $"Downloading v{_updateService.LatestVersion} — {_updateService.Progress}%",
+        UpdateStage.Downloaded => $"v{_updateService.LatestVersion} downloaded — ready to install",
+        UpdateStage.Failed => $"Update failed: {_updateService.Error}",
+        _ => $"No updates — v{UpdateService.CurrentVersion}"
+    };
+
+    /// <summary>Tooltip headline: with nothing update-related to report, the
+    /// freshly installed version becomes the headline so the dot never
+    /// points at a lie.</summary>
+    private string BellHeadline()
+    {
+        if (_whatsNewActive && _updateService.Stage is UpdateStage.Idle or UpdateStage.UpToDate)
+            return $"What's new in v{UpdateService.CurrentVersion}";
+        return UpdateHeadline();
+    }
+
+    private void CloseBellPopup()
+    {
+        var popup = this.FindControl<Popup>("BellPopup");
+        if (popup != null) popup.IsOpen = false;
+    }
+
+    private Button BellAction(string text, Action onClick)
+    {
+        var b = new Button
+        {
+            Content = text,
+            Height = 28,
+            Padding = new Thickness(14, 0),
+            FontSize = 11,
+            FontWeight = FontWeight.SemiBold
+        };
+        b.Classes.Add("util");
+        b.Click += (_, _) => { CloseBellPopup(); onClick(); };
+        return b;
+    }
+
+    private void BuildBellPopup()
+    {
+        var panel = this.FindControl<StackPanel>("BellPopupPanel");
+        if (panel == null) return;
+        panel.Children.Clear();
+
+        void Line(string text, double size, string color, FontWeight weight, double top = 0)
+        {
+            panel.Children.Add(new TextBlock
+            {
+                Text = text,
+                FontSize = size,
+                FontWeight = weight,
+                Foreground = new SolidColorBrush(Color.Parse(color)),
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, top, 0, 0)
+            });
+        }
+
+        // Post-update notice: the app was just updated and the changelog has
+        // not been opened yet — offer it before the regular status block.
+        if (_whatsNewActive)
+        {
+            Line("WHAT'S NEW", 9, "#7c5cfc", FontWeight.Bold);
+            Line($"v{UpdateService.CurrentVersion} is installed", 12, "#ededef", FontWeight.Bold, 2);
+            var whatsRow = new StackPanel { Spacing = 8, Margin = new Thickness(0, 8, 0, 0) };
+            whatsRow.Children.Add(BellAction("Read changelog", ShowChangelogWindow));
+            panel.Children.Add(whatsRow);
+        }
+
+        Line("UPDATE", 9, "#7c5cfc", FontWeight.Bold);
+        Line(UpdateHeadline(), 12, "#ededef", FontWeight.Bold, 2);
+
+        // Release notes: straight from the GitHub release of a pending update.
+        var notes = _updateService.ReleaseNotes?.Trim();
+        if (!string.IsNullOrEmpty(notes) &&
+            _updateService.Stage is UpdateStage.Available or UpdateStage.Downloading or UpdateStage.Downloaded)
+        {
+            Line("RELEASE NOTES", 9, "#5c5c66", FontWeight.Bold, 8);
+            panel.Children.Add(new ScrollViewer
+            {
+                MaxHeight = 190,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                Content = new TextBlock
+                {
+                    Text = notes,
+                    FontSize = 11,
+                    Foreground = new SolidColorBrush(Color.Parse("#a5a5b0")),
+                    TextWrapping = TextWrapping.Wrap
+                }
+            });
+        }
+
+        var row = new StackPanel { Spacing = 8, Margin = new Thickness(0, 8, 0, 0) };
+        switch (_updateService.Stage)
+        {
+            case UpdateStage.Available:
+                row.Children.Add(BellAction("Download", () => _updateService.StartDownload()));
+                row.Children.Add(BellAction("Check again", () => _updateService.StartCheck(false)));
+                break;
+            case UpdateStage.Downloading:
+                row.Children.Add(BellAction("Cancel", () => _updateService.Cancel()));
+                break;
+            case UpdateStage.Downloaded:
+                row.Children.Add(BellAction("Install now", () => _updateService.TryInstall()));
+                row.Children.Add(BellAction("Later", () => { }));
+                break;
+            case UpdateStage.Failed:
+                row.Children.Add(BellAction("Retry", () => _updateService.StartCheck(false)));
+                break;
+            default:
+                row.Children.Add(BellAction("Check for updates", () => _updateService.StartCheck(false)));
+                break;
+        }
+        panel.Children.Add(row);
     }
 
     #endregion

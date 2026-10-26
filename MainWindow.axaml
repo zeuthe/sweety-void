@@ -463,6 +463,13 @@
         <Style Selector="ScrollViewer">
             <Setter Property="Background" Value="Transparent"/>
         </Style>
+    <!-- ─── UPDATE BELL (status bar) ─── -->
+        <Style Selector="Button#BellBtn Path">
+            <Setter Property="Fill" Value="{StaticResource TextSecondary}"/>
+        </Style>
+        <Style Selector="Button#BellBtn:pointerover Path">
+            <Setter Property="Fill" Value="{StaticResource TextPrimary}"/>
+        </Style>
     </Window.Styles>
 
     <Border Background="{StaticResource SurfaceBase}" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="0" HorizontalAlignment="Stretch">
@@ -601,9 +608,35 @@
                     </StackPanel>
 
                     
-                    <TextBlock Grid.Column="2" Name="BarStatusText" Text="Ready"
-                               Foreground="{StaticResource TextTertiary}" FontSize="11"
-                               HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8"
+                                VerticalAlignment="Center" HorizontalAlignment="Right">
+                        <TextBlock Name="BarStatusText" Text="Ready"
+                                   Foreground="{StaticResource TextTertiary}" FontSize="11"
+                                   VerticalAlignment="Center"/>
+                        <!-- Update bell: quiet by default; a blinking red dot at the
+                             top-right corner means there is update news to read. -->
+                        <Button Name="BellBtn" Width="22" Height="22" Padding="0"
+                                AutomationProperties.Name="Update notifications"
+                                ToolTip.Tip="Update notifications">
+                            <Panel Width="16" Height="16">
+                                <Viewbox Width="16" Height="16" Stretch="Uniform">
+                                    <Path Data="M29.78,24.37l-3.65-4.48L26,12a1,1,0,0,0,0-.16C24.85,5.58,21.21,2,16,2,10.5,2,6.08,6,5,11.82A1,1,0,0,0,5,12l-.13,8L2.14,24.48a1,1,0,0,0,0,1A1,1,0,0,0,3,26h9a4,4,0,0,0,8,0h9a1,1,0,0,0,.9-.57A1,1,0,0,0,29.78,24.37ZM16,28a2,2,0,0,1-2-2h4A2,2,0,0,1,16,28ZM4.77,24l2-3.24a1,1,0,0,0,.14-.5L7,12.1C7.91,7.25,11.52,4,16,4c5.63,0,7.43,5,8,8.1l.14,8.16a1,1,0,0,0,.22.62L26.9,24Z"/>
+                                </Viewbox>
+                                <Border Name="BellDot" Width="7" Height="7" CornerRadius="4"
+                                        Background="#ef4444" IsVisible="False" ZIndex="2"
+                                        HorizontalAlignment="Right" VerticalAlignment="Top"
+                                        Margin="0,-1,-1,0"/>
+                            </Panel>
+                        </Button>
+                        <Popup Name="BellPopup" PlacementMode="Top" IsLightDismissEnabled="True"
+                               MaxWidth="380" MaxHeight="440">
+                            <Border Background="{StaticResource SurfaceOverlay}"
+                                    BorderBrush="{StaticResource BorderDefault}" BorderThickness="1"
+                                    CornerRadius="10" Padding="14" BoxShadow="0 10 28 0 #66000000">
+                                <StackPanel Name="BellPopupPanel" Spacing="6"/>
+                            </Border>
+                        </Popup>
+                    </StackPanel>
                 </Grid>
             </Border>
 

@@ -41,6 +41,8 @@
 
   <ItemGroup>
     <None Include="presets\**\*" CopyToOutputDirectory="PreserveNewest" LinkBase="presets" />
+    <!-- Read by the bell's "What's new" window after an update -->
+    <None Update="CHANGELOG.txt" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

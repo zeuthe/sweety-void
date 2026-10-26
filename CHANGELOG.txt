@@ -1,0 +1,28 @@
+#  Sweety Void Changelog
+
+## Version 1.1.2 - Latest Update
+
+### New Features
+- **Pop-out windows**: Tracker panels ("Who killed me" and "Combat log") can now be popped out into separate floating windows with browser/mini-player style icons
+- **Background transparency**: Toggleable transparent background for popped-out windows
+- **Update notifications**: Bell icon in status bar shows update availability with blinking red dot
+- **Update popup**: Clicking the bell opens a popup with update details, release notes, and install/actions
+
+### UI Improvements
+- **Browser/mini-player style pop-out icons**: Kill and combat log buttons now feature window frame icons with outward-pointing arrows
+- **Return arrow in popped windows**: Window title bar includes arrow button that flies back into the window when clicked
+- **Status bar bell icon**: New update notification bell in the bottom status bar
+- **Improved bell icon**: SVG-based bell icon with red blinking dot for update notices
+
+### Bug Fixes
+- Fixed background toggle to properly hide/show panel backgrounds without affecting lines/text
+- Fixed window transparency handling in Windows native backend
+- Various UI stability improvements
+
+### Known Issues
+- None at this time
+
+### At the next update
+-fixing bags
+-revorking ui and interface
+-  potentially working on graphics or binds

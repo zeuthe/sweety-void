@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Animation;
+using Avalonia.Animation.Easings;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Documents;
@@ -177,22 +178,9 @@ public partial class TrackerPage : UserControl
     // the panel into a separate window (the inline copy collapses to the
     // header) and clicking it again — or the window's ✕ — brings the panel
     // back into the app. Windows are topmost: they stay above every window.
-    private bool _killPopBusy;
-    private bool _combatPopBusy;
-
-    private async void OpenKillWindow()
+    private void OpenKillWindow()
     {
-        if (_killPopBusy) return;
-        if (_killWindow != null)
-        {
-            _ = PlayPopSweepAsync("KillMePopSweep"); // feedback while it returns
-            _killWindow.Close();
-            return;
-        }
-        _killPopBusy = true;
-        try { await PlayPopSweepAsync("KillMePopSweep"); }
-        finally { _killPopBusy = false; }
-        if (_killWindow != null) return;
+        if (_killWindow != null) { _killWindow.Close(); return; }
         var win = new TrackerPanelWindow("Who killed me", 460, 560);
         _killWindow = win;
         win.Closed += (_, _) =>
@@ -206,19 +194,9 @@ public partial class TrackerPage : UserControl
         OnPopOutChanged();
     }
 
-    private async void OpenCombatWindow()
+    private void OpenCombatWindow()
     {
-        if (_combatPopBusy) return;
-        if (_combatWindow != null)
-        {
-            _ = PlayPopSweepAsync("CombatLogPopSweep"); // feedback while it returns
-            _combatWindow.Close();
-            return;
-        }
-        _combatPopBusy = true;
-        try { await PlayPopSweepAsync("CombatLogPopSweep"); }
-        finally { _combatPopBusy = false; }
-        if (_combatWindow != null) return;
+        if (_combatWindow != null) { _combatWindow.Close(); return; }
         var win = new TrackerPanelWindow("Combat log", 860, 420, BuildCombatTableHeader());
         _combatWindow = win;
         win.Closed += (_, _) =>
@@ -230,34 +208,6 @@ public partial class TrackerPage : UserControl
         ShowPanelWindow(win);
         RenderCombatLogInto(_combatWindow);
         OnPopOutChanged();
-    }
-
-    /// <summary>Green edge sweep along the pop button's bottom edge
-    /// (bottom-left → bottom-right), like the browser's mini-player activation.</summary>
-    private async Task PlayPopSweepAsync(string sweepName)
-    {
-        if (this.FindControl<Border>(sweepName) is not { } sweep) return;
-        sweep.Width = 0;
-        sweep.IsVisible = true;
-        var anim = new Animation
-        {
-            Duration = TimeSpan.FromMilliseconds(380),
-            Children =
-            {
-                new KeyFrame
-                {
-                    Cue = new Cue(0d),
-                    Setters = { new Setter(Layoutable.WidthProperty, 0d) }
-                },
-                new KeyFrame
-                {
-                    Cue = new Cue(1d),
-                    Setters = { new Setter(Layoutable.WidthProperty, 18d) }
-                }
-            }
-        };
-        await anim.RunAsync(sweep);
-        sweep.IsVisible = false;
     }
 
     /// <summary>Pop-out state changed: re-apply the split (a popped panel

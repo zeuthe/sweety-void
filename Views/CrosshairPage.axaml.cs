@@ -12,6 +12,7 @@ using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
+using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using VoidUI.Models;
@@ -112,7 +113,7 @@ public partial class CrosshairPage : UserControl
         _selectedAnim = ch.Animation ?? "none";
         _spinEnabled = ch.SpinEnabled;
         _orbitEnabled = ch.OrbitEnabled;
-        _selectedColor = ch.Color ?? "#22c55e";
+        _selectedColor = SafeColor(ch.Color);
         _size = ch.Size; _thickness = Math.Max(ch.Thickness, 1); _opacity = ch.Opacity;
         _speed = ch.Speed; _rotation = ch.Rotation; _posX = ch.PosX; _posY = ch.PosY;
         _spinSpeed = ch.SpinSpeed; _spinDir = ch.SpinDir ?? "normal";
@@ -200,13 +201,29 @@ public partial class CrosshairPage : UserControl
             if (string.IsNullOrEmpty(srcPath)) return;
             try
             {
+                // Validate before copying: a garbage JSON used to be copied
+                // silently and then ignored by RebuildRainbowThemes forever.
+                AnimPreset? probe = null;
+                try
+                {
+                    probe = Newtonsoft.Json.JsonConvert.DeserializeObject<AnimPreset>(File.ReadAllText(srcPath));
+                }
+                catch { probe = null; }
+
+                if (probe == null || string.IsNullOrWhiteSpace(probe.Name) || probe.Palette == null || probe.Palette.Count == 0)
+                {
+                    ShowConfigMsg("Invalid preset: need name + palette");
+                    return;
+                }
+
                 var presetsDir = UserPresets.AnimPresetsDir;
                 Directory.CreateDirectory(presetsDir);
                 var dstPath = System.IO.Path.Combine(presetsDir, System.IO.Path.GetFileName(srcPath));
                 File.Copy(srcPath, dstPath, true);
                 RebuildRainbowThemes();
+                ShowConfigMsg($"Imported: {probe.Name}");
             }
-            catch { }
+            catch (Exception ex) { ShowConfigMsg("Import failed: " + ex.Message); }
         });
 
         var bindInput = this.FindControl<Button>("BindInput");
@@ -293,26 +310,213 @@ public partial class CrosshairPage : UserControl
         SetupConfigs();
 
         ApplyLive();
+
+        // Global search can hand us a config/preset before Loaded runs —
+        // OnLoaded overwrites state from saved settings, which used to revert
+        // the just-loaded config. Apply the queued action only now.
+        if (_pendingConfigPath != null)
+        {
+            var p = _pendingConfigPath;
+            _pendingConfigPath = null;
+            LoadConfig(p);
+        }
+        else if (_pendingPreset != null)
+        {
+            var p = _pendingPreset;
+            _pendingPreset = null;
+            SelectPreset(p);
+        }
     }
+
+    private string? _pendingConfigPath;
+    private string? _pendingPreset;
 
     private void SetupConfigs()
     {
-        SetupButton("SaveConfigBtn", () =>
+        SetupButton("SaveConfigBtn", async () =>
         {
-            var configsDir = UserPresets.ConfigsDir;
-            Directory.CreateDirectory(configsDir);
+            var topLevel = TopLevel.GetTopLevel(this);
+            if (topLevel == null) return;
 
-            var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-            var configName = $"config_{timestamp}";
-            var path = System.IO.Path.Combine(configsDir, $"{configName}.json");
+            // Show name input dialog
+            var win = new Window
+            {
+                Width = 340,
+                SizeToContent = SizeToContent.Height,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Background = Brushes.Transparent,
+                SystemDecorations = SystemDecorations.None,
+                CanResize = false,
+                ShowInTaskbar = false,
+                TransparencyLevelHint = new[] { WindowTransparencyLevel.Transparent }
+            };
 
-            var ch = BuildCurrentState();
+            var card = new Border
+            {
+                Background = new SolidColorBrush(Color.Parse("#16161c")),
+                BorderBrush = new SolidColorBrush(Color.Parse("#2a2a34")),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(14),
+                Padding = new Thickness(20),
+                BoxShadow = BoxShadows.Parse("0 12 32 0 #55000000")
+            };
 
-            var json = Newtonsoft.Json.JsonConvert.SerializeObject(ch, Newtonsoft.Json.Formatting.Indented);
-            File.WriteAllText(path, json);
+            var title = new TextBlock
+            {
+                Text = "Название конфига",
+                Foreground = new SolidColorBrush(Color.Parse("#ededef")),
+                FontSize = 14,
+                FontWeight = FontWeight.SemiBold,
+                Margin = new Thickness(0, 0, 0, 10)
+            };
 
-            ShowConfigStatus($"Saved: {configName}");
-            RefreshConfigsList();
+            var nameBox = new TextBox
+            {
+                Watermark = "например: my-crosshair",
+                FontSize = 14,
+                MinWidth = 200,
+                MaxWidth = 280,
+                Height = 36,
+                Background = new SolidColorBrush(Color.Parse("#111114")),
+                BorderBrush = new SolidColorBrush(Color.Parse("#2a2a34")),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(8),
+                Padding = new Thickness(10, 0),
+                Text = $"config_{DateTime.Now:yyyyMMdd_HHmmss}"
+            };
+
+            var btnRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 16, 0, 0) };
+
+            var saveBtn = new Button
+            {
+                Content = "Сохранить",
+                Width = 100,
+                Height = 32,
+                Background = new SolidColorBrush(Color.Parse("#7c5cfc")),
+                Foreground = Brushes.White,
+                CornerRadius = new CornerRadius(9),
+                BorderThickness = new Thickness(0),
+                FontSize = 11,
+                FontWeight = FontWeight.SemiBold,
+                Cursor = new Cursor(StandardCursorType.Hand)
+            };
+            var cancelBtn = new Button
+            {
+                Content = "Отмена",
+                Width = 100,
+                Height = 32,
+                Background = new SolidColorBrush(Color.Parse("#1e1e26")),
+                Foreground = new SolidColorBrush(Color.Parse("#a5a5b0")),
+                CornerRadius = new CornerRadius(9),
+                BorderBrush = new SolidColorBrush(Color.Parse("#2a2a34")),
+                BorderThickness = new Thickness(1),
+                FontSize = 11,
+                FontWeight = FontWeight.SemiBold,
+                Cursor = new Cursor(StandardCursorType.Hand)
+            };
+
+            // BUGFIX: buttons were created but never added to btnRow, so the
+            // save dialog rendered an empty button row (only Enter/Esc worked).
+            btnRow.Children.Add(cancelBtn);
+            btnRow.Children.Add(saveBtn);
+
+            var errText = new TextBlock
+            {
+                Foreground = new SolidColorBrush(Color.Parse("#ef4444")),
+                FontSize = 11,
+                TextWrapping = TextWrapping.Wrap,
+                IsVisible = false,
+                Margin = new Thickness(0, 6, 0, 0),
+            };
+
+            var panel = new StackPanel { Spacing = 4 };
+            panel.Children.Add(title);
+            panel.Children.Add(nameBox);
+            panel.Children.Add(errText);
+            panel.Children.Add(btnRow);
+            card.Child = panel;
+            win.Content = card;
+
+            void ShowErr(string msg)
+            {
+                errText.Text = msg;
+                errText.IsVisible = true;
+            }
+
+            bool ValidateName(string rawName)
+            {
+                var name = (rawName ?? "").Trim();
+                if (string.IsNullOrWhiteSpace(name))
+                {
+                    ShowErr("Введите имя конфига");
+                    return false;
+                }
+                var first = name[0];
+                if (!char.IsLetterOrDigit(first) && first != '_')
+                {
+                    ShowErr("Имя должно начинаться с буквы, цифры или _");
+                    return false;
+                }
+                return true;
+            }
+
+            void SaveAndClose(string rawName)
+            {
+                if (!ValidateName(rawName)) return;
+
+                var name = rawName.Trim();
+                var configsDir = UserPresets.ConfigsDir;
+                Directory.CreateDirectory(configsDir);
+
+                var safeName = string.Join("_", name.Split(System.IO.Path.GetInvalidFileNameChars()));
+                if (string.IsNullOrWhiteSpace(safeName)) safeName = "config";
+
+                // Ensure unique name
+                var path = System.IO.Path.Combine(configsDir, $"{safeName}.json");
+                if (File.Exists(path))
+                {
+                    var baseName = safeName;
+                    int i = 1;
+                    while (File.Exists(path))
+                    {
+                        path = System.IO.Path.Combine(configsDir, $"{baseName}_{i}.json");
+                        i++;
+                    }
+                }
+
+                try
+                {
+                    var ch = BuildCurrentState();
+                    var json = Newtonsoft.Json.JsonConvert.SerializeObject(ch, Newtonsoft.Json.Formatting.Indented);
+                    File.WriteAllText(path, json);
+                    UserPresets.Touch(); // invalidate global search index
+                }
+                catch (Exception ex)
+                {
+                    ShowErr("Ошибка сохранения: " + ex.Message);
+                    return;
+                }
+
+                ShowConfigStatus($"Сохранено: {System.IO.Path.GetFileNameWithoutExtension(path)}");
+                RefreshConfigsList();
+                win.Close(true);
+            }
+
+            // Exactly one handler per button (previous version registered
+            // save/cancel twice, causing double-close and invisible errors).
+            saveBtn.Click += (_, _) => SaveAndClose(nameBox.Text);
+            cancelBtn.Click += (_, _) => win.Close(null);
+
+            win.KeyDown += (_, e) =>
+            {
+                if (e.Key == Key.Escape) win.Close(null);
+                else if (e.Key == Key.Enter) SaveAndClose(nameBox.Text);
+            };
+
+            if (TopLevel.GetTopLevel(this) is Window owner)
+                await win.ShowDialog(owner);
+            else
+                win.Show();
         });
 
         SetupButton("CopyConfigBtn", () =>
@@ -347,19 +551,283 @@ public partial class CrosshairPage : UserControl
                 BorderBrush = new SolidColorBrush(Color.Parse("#232329"))
             };
             btn.Click += (_, _) => LoadConfig(file);
-            btn.ContextRequested += (_, _) =>
-            {
-                try { File.Delete(file); RefreshConfigsList(); ShowConfigStatus($"Deleted: {name}"); } catch { }
-            };
+            // Assign through the ContextMenu property: Avalonia's built-in
+            // ContextRequested handling then opens it at the pointer position
+            // (exactly like Windows). Calling menu.Open() manually threw
+            // ArgumentNullException because the menu was never attached.
+            btn.ContextMenu = BuildConfigContextMenu(file, name);
             panel.Children.Add(btn);
         }
     }
 
-    public void LoadConfigFile(string path) => LoadConfig(path);
+    public void LoadConfigFile(string path)
+    {
+        // Before Loaded the page state gets rebuilt from saved settings,
+        // so defer instead of letting OnLoaded overwrite the loaded config.
+        if (!IsLoaded) { _pendingConfigPath = path; _pendingPreset = null; return; }
+        LoadConfig(path);
+    }
+
+    /// <summary>Windows-style context menu for saved configs: Выбрать /
+    /// Переименовать / Открыть в блокноте / Удалить (red).</summary>
+    private ContextMenu BuildConfigContextMenu(string file, string name)
+    {
+        var menu = new ContextMenu
+        {
+            Background = new SolidColorBrush(Color.Parse("#16161c")),
+            Foreground = new SolidColorBrush(Color.Parse("#ededef")),
+            BorderBrush = new SolidColorBrush(Color.Parse("#2a2a34")),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(10),
+            Padding = new Thickness(6, 6),
+            MinWidth = 190,
+            FontSize = 13,
+        };
+
+        // Style all MenuItems inside this context menu to match app theme
+        var itemNormal = new Style(x => x.OfType<MenuItem>());
+        itemNormal.Setters.Add(new Setter(MenuItem.BackgroundProperty, Brushes.Transparent));
+        itemNormal.Setters.Add(new Setter(MenuItem.ForegroundProperty, new SolidColorBrush(Color.Parse("#ededef"))));
+        itemNormal.Setters.Add(new Setter(MenuItem.PaddingProperty, new Thickness(12, 8)));
+        itemNormal.Setters.Add(new Setter(MenuItem.CornerRadiusProperty, new CornerRadius(6)));
+        itemNormal.Setters.Add(new Setter(MenuItem.MinHeightProperty, 32.0));
+        menu.Styles.Add(itemNormal);
+
+        var itemHover = new Style(x => x.OfType<MenuItem>().Class(":pointerover"));
+        itemHover.Setters.Add(new Setter(MenuItem.BackgroundProperty, new SolidColorBrush(Color.Parse("#27272e"))));
+        menu.Styles.Add(itemHover);
+
+        // Separator style
+        var sepStyle = new Style(x => x.OfType<Separator>());
+        sepStyle.Setters.Add(new Setter(Separator.BackgroundProperty, new SolidColorBrush(Color.Parse("#2a2a34"))));
+        sepStyle.Setters.Add(new Setter(Separator.MarginProperty, new Thickness(8, 4)));
+        sepStyle.Setters.Add(new Setter(Separator.HeightProperty, 1.0));
+        menu.Styles.Add(sepStyle);
+
+        // ── 1. Выбрать ──
+        var selectItem = new MenuItem { Header = "Выбрать" };
+        selectItem.Click += (_, _) => LoadConfig(file);
+        menu.Items.Add(selectItem);
+
+        // ── 2. Переименовать ──
+        var renameItem = new MenuItem { Header = "Переименовать" };
+        renameItem.Click += (_, _) => ShowRenameDialog(file, name);
+        menu.Items.Add(renameItem);
+
+        // ── 3. Открыть в блокноте ──
+        var notepadItem = new MenuItem { Header = "Открыть в блокноте" };
+        notepadItem.Click += (_, _) =>
+        {
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "notepad.exe",
+                    Arguments = $"\"{file}\"",
+                    UseShellExecute = true
+                });
+            }
+            catch { ShowConfigStatus("Не удалось открыть в блокноте"); }
+        };
+        menu.Items.Add(notepadItem);
+
+        // ── Separator before destructive action ──
+        menu.Items.Add(new Separator());
+
+        // ── 4. Удалить (red) ──
+        var deleteItem = new MenuItem { Header = "Удалить" };
+        deleteItem.Foreground = new SolidColorBrush(Color.Parse("#ef4444"));
+        deleteItem.Click += (_, _) =>
+        {
+            try
+            {
+                File.Delete(file);
+                RefreshConfigsList();
+                UserPresets.Touch();
+                ShowConfigStatus($"Удалено: {name}");
+            }
+            catch { ShowConfigStatus("Не удалось удалить"); }
+        };
+        menu.Items.Add(deleteItem);
+
+        // Returned to the caller which assigns it to btn.ContextMenu; opening
+        // happens automatically in ContextRequested, positioned at the pointer
+        // (ContextMenu's default Placement is PlacementMode.Pointer).
+        return menu;
+    }
+
+    /// <summary>App-styled dialog to rename a saved config.</summary>
+    private async void ShowRenameDialog(string file, string oldName)
+    {
+        var topLevel = TopLevel.GetTopLevel(this);
+        if (topLevel is not Window owner) return;
+
+        var win = new Window
+        {
+            Width = 340,
+            SizeToContent = SizeToContent.Height,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Background = Brushes.Transparent,
+            SystemDecorations = SystemDecorations.None,
+            CanResize = false,
+            ShowInTaskbar = false,
+            TransparencyLevelHint = new[] { WindowTransparencyLevel.Transparent },
+        };
+
+        var card = new Border
+        {
+            Background = new SolidColorBrush(Color.Parse("#16161c")),
+            BorderBrush = new SolidColorBrush(Color.Parse("#2a2a34")),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(14),
+            Padding = new Thickness(20),
+            BoxShadow = BoxShadows.Parse("0 12 32 0 #55000000"),
+        };
+
+        var title = new TextBlock
+        {
+            Text = "Переименовать конфиг",
+            Foreground = new SolidColorBrush(Color.Parse("#ededef")),
+            FontSize = 14,
+            FontWeight = FontWeight.SemiBold,
+            Margin = new Thickness(0, 0, 0, 10),
+        };
+
+        var nameBox = new TextBox
+        {
+            Text = oldName,
+            FontSize = 14,
+            MinWidth = 240,
+            Height = 36,
+            Background = new SolidColorBrush(Color.Parse("#111114")),
+            BorderBrush = new SolidColorBrush(Color.Parse("#2a2a34")),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(8),
+            Padding = new Thickness(10, 0),
+        };
+
+        var okBtn = new Button
+        {
+            Content = "Применить",
+            Width = 110,
+            Height = 32,
+            Background = new SolidColorBrush(Color.Parse("#7c5cfc")),
+            Foreground = Brushes.White,
+            CornerRadius = new CornerRadius(9),
+            BorderThickness = new Thickness(0),
+            FontSize = 11,
+            FontWeight = FontWeight.SemiBold,
+            Cursor = new Cursor(StandardCursorType.Hand),
+        };
+
+        var cancelBtn = new Button
+        {
+            Content = "Отмена",
+            Width = 100,
+            Height = 32,
+            Background = new SolidColorBrush(Color.Parse("#1e1e26")),
+            Foreground = new SolidColorBrush(Color.Parse("#a5a5b0")),
+            CornerRadius = new CornerRadius(9),
+            BorderBrush = new SolidColorBrush(Color.Parse("#2a2a34")),
+            BorderThickness = new Thickness(1),
+            FontSize = 11,
+            FontWeight = FontWeight.SemiBold,
+            Cursor = new Cursor(StandardCursorType.Hand),
+        };
+
+        var errText = new TextBlock
+        {
+            Foreground = new SolidColorBrush(Color.Parse("#ef4444")),
+            FontSize = 11,
+            TextWrapping = TextWrapping.Wrap,
+            IsVisible = false,
+            Margin = new Thickness(0, 6, 0, 0),
+        };
+
+        okBtn.Click += (_, _) =>
+        {
+            var newName = (nameBox.Text ?? "").Trim();
+            if (string.IsNullOrWhiteSpace(newName))
+            {
+                errText.Text = "Введите имя конфига";
+                errText.IsVisible = true;
+                return;
+            }
+
+            newName = string.Join("_", newName.Split(System.IO.Path.GetInvalidFileNameChars()));
+            if (string.IsNullOrWhiteSpace(newName))
+            {
+                errText.Text = "Недопустимое имя";
+                errText.IsVisible = true;
+                return;
+            }
+
+            var dir = UserPresets.ConfigsDir;
+            var newPath = System.IO.Path.Combine(dir, newName + ".json");
+
+            // Renaming to the same file (or only changing letter case) is a no-op.
+            if (string.Equals(newPath, file, StringComparison.OrdinalIgnoreCase))
+            {
+                win.Close(true);
+                return;
+            }
+
+            if (File.Exists(newPath))
+            {
+                // Error must be visible inside the modal dialog, not behind it.
+                errText.Text = "Такое имя уже существует";
+                errText.IsVisible = true;
+                return;
+            }
+
+            try
+            {
+                File.Move(file, newPath, overwrite: false);
+                RefreshConfigsList();
+                UserPresets.Touch();
+                ShowConfigStatus($"Переименовано: {newName}");
+                win.Close(true);
+            }
+            catch (Exception ex)
+            {
+                errText.Text = "Ошибка переименования: " + ex.Message;
+                errText.IsVisible = true;
+            }
+        };
+
+        cancelBtn.Click += (_, _) => win.Close(false);
+
+        win.KeyDown += (_, e) =>
+        {
+            if (e.Key == Key.Escape) win.Close(false);
+            else if (e.Key == Key.Enter) okBtn.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        };
+
+        var btnRow = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 10,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Margin = new Thickness(0, 16, 0, 0),
+        };
+        btnRow.Children.Add(cancelBtn);
+        btnRow.Children.Add(okBtn);
+
+        var panel = new StackPanel { Spacing = 4 };
+        panel.Children.Add(title);
+        panel.Children.Add(nameBox);
+        panel.Children.Add(errText);
+        panel.Children.Add(btnRow);
+        card.Child = panel;
+        win.Content = card;
+
+        await win.ShowDialog<bool>(owner);
+    }
 
     public void SelectPreset(string presetName)
     {
         if (!_presetNames.Contains(presetName)) return;
+        if (!IsLoaded) { _pendingPreset = presetName; _pendingConfigPath = null; return; }
         _selectedPreset = presetName;
         SyncButtonGroupActive("PresetGroup", _presetNames, _selectedPreset);
         ApplyLive();
@@ -738,11 +1206,20 @@ public partial class CrosshairPage : UserControl
 
     // Fills the same defaults ApplyCrosshairState uses, so a partial config
     // deserializes to the exact state it would end up in after applying.
+    /// <summary>Validates a color string coming from settings, an imported
+    /// preset or a pasted share code; falls back instead of letting
+    /// Color.Parse throw and crash the preview.</summary>
+    private static string SafeColor(string? hex, string fallback = "#22c55e")
+    {
+        if (string.IsNullOrWhiteSpace(hex)) return fallback;
+        return Color.TryParse(hex, out _) ? hex! : fallback;
+    }
+
     private static CrosshairState NormalizeState(CrosshairState ch) => new CrosshairState
     {
         Preset = ch.Preset ?? "dot", Animation = ch.Animation ?? "none",
         SpinEnabled = ch.SpinEnabled, OrbitEnabled = ch.OrbitEnabled,
-        Color = ch.Color ?? "#22c55e", Size = ch.Size, Thickness = Math.Max(ch.Thickness, 1),
+        Color = SafeColor(ch.Color), Size = ch.Size, Thickness = Math.Max(ch.Thickness, 1),
         Opacity = ch.Opacity, Speed = ch.Speed, Rotation = ch.Rotation,
         PosX = ch.PosX, PosY = ch.PosY,
         SpinSpeed = ch.SpinSpeed, SpinDir = ch.SpinDir ?? "normal",
@@ -761,7 +1238,7 @@ public partial class CrosshairPage : UserControl
         _selectedAnim = ch.Animation ?? "none";
         _spinEnabled = ch.SpinEnabled;
         _orbitEnabled = ch.OrbitEnabled;
-        _selectedColor = ch.Color ?? "#22c55e";
+        _selectedColor = SafeColor(ch.Color);
         _size = ch.Size; _thickness = Math.Max(ch.Thickness, 1); _opacity = ch.Opacity;
         _speed = ch.Speed; _rotation = ch.Rotation;
         _posX = ch.PosX; _posY = ch.PosY;
@@ -775,16 +1252,31 @@ public partial class CrosshairPage : UserControl
         ApplyLive();
     }
 
+    private DispatcherTimer? _configMsgTimer;
+
     private void ShowConfigMsg(string msg)
     {
         var tb = this.FindControl<TextBlock>("ConfigMsg");
         if (tb == null) return;
         tb.Text = msg;
         tb.IsVisible = true;
-        var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
-        timer.Tick += (_, _) => { tb.IsVisible = false; timer.Stop(); };
-        timer.Start();
+
+        // Single reused timer (a new timer per call let stale ones hide the
+        // fresh message early).
+        if (_configMsgTimer == null)
+        {
+            _configMsgTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+            _configMsgTimer.Tick += (_, _) =>
+            {
+                tb.IsVisible = false;
+                _configMsgTimer!.Stop();
+            };
+        }
+        _configMsgTimer.Stop();
+        _configMsgTimer.Start();
     }
+
+    private DispatcherTimer? _configStatusTimer;
 
     private void ShowConfigStatus(string msg)
     {
@@ -792,9 +1284,20 @@ public partial class CrosshairPage : UserControl
         if (tb == null) return;
         tb.Text = msg;
         tb.IsVisible = true;
-        var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
-        timer.Tick += (_, _) => { tb.IsVisible = false; timer.Stop(); };
-        timer.Start();
+
+        // Reuse a single timer: creating a new one per call let stale timers
+        // hide the freshly shown message early.
+        if (_configStatusTimer == null)
+        {
+            _configStatusTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+            _configStatusTimer.Tick += (_, _) =>
+            {
+                tb.IsVisible = false;
+                _configStatusTimer!.Stop();
+            };
+        }
+        _configStatusTimer.Stop();
+        _configStatusTimer.Start();
     }
 
     private void SetupButton(string name, Action onClick)
@@ -1400,11 +1903,18 @@ public partial class CrosshairPage : UserControl
             {
                 var json = File.ReadAllText(file);
                 var obj = Newtonsoft.Json.JsonConvert.DeserializeObject<AnimPreset>(json);
-                if (obj != null && !string.IsNullOrEmpty(obj.Name))
+                if (obj != null && !string.IsNullOrWhiteSpace(obj.Name) && obj.Palette != null)
                 {
+                    // Drop unparseable colors: one bad entry used to reach
+                    // Color.Parse in RebuildPreview and crash the page.
+                    var valid = obj.Palette
+                        .Where(c => !string.IsNullOrWhiteSpace(c) && Color.TryParse(c, out _))
+                        .ToArray();
+                    if (valid.Length == 0) continue;
+
                     names.Add(obj.Name.ToLower());
                     labels.Add(obj.Name);
-                    colors.Add(obj.Palette.ToArray());
+                    colors.Add(valid);
                 }
             }
             catch { }
@@ -1566,7 +2076,9 @@ public partial class CrosshairPage : UserControl
         _previewPaletteRgb = new byte[palette.Count * 3];
         for (int i = 0; i < palette.Count; i++)
         {
-            var pc = Color.Parse(palette[i]);
+            // TryParse instead of Parse: a malformed palette entry must not
+            // take down the whole preview loop.
+            if (!Color.TryParse(palette[i], out var pc)) pc = Color.Parse("#22c55e");
             _previewPaletteRgb[i * 3] = pc.R;
             _previewPaletteRgb[i * 3 + 1] = pc.G;
             _previewPaletteRgb[i * 3 + 2] = pc.B;
@@ -1580,7 +2092,7 @@ public partial class CrosshairPage : UserControl
         double cx = posX + (state.OrbitEnabled ? state.OrbitRadius : 0);
         double cy = posY;
 
-        var brush = new SolidColorBrush(Color.Parse(state.Color));
+        var brush = new SolidColorBrush(Color.Parse(SafeColor(state.Color)));
         _previewBrushes.Add(brush);
 
         double t = CrosshairGeometry.Thickness(state.Thickness);

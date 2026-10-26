@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Net.Sockets;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
@@ -100,6 +101,48 @@ namespace VoidUI.Services
         public void Cancel()
         {
             _cts?.Cancel();
+
+            // Without this the bell kept claiming "Downloading…" (with the dot
+            // pulsing) forever after the user pressed Cancel — fall back to the
+            // state we actually know about.
+            if (Stage == UpdateStage.Downloading) Set(UpdateStage.Available);
+            else if (Stage == UpdateStage.Checking) Set(UpdateStage.Idle);
+        }
+
+        /// <summary>The bell shows Error verbatim, while OS/.NET exception
+        /// messages follow the system language — when the text comes back
+        /// localized we summarize the known failures in English instead.
+        /// Already-English messages (our own throws) are kept verbatim.</summary>
+        private static string DescribeError(Exception ex)
+        {
+            var msg = ex.Message ?? "";
+            if (!HasCyrillic(msg)) return msg;
+
+            for (var e = ex; e != null; e = e.InnerException)
+            {
+                if (e is SocketException se)
+                    return se.SocketErrorCode switch
+                    {
+                        SocketError.ConnectionRefused => "connection refused",
+                        SocketError.ConnectionReset => "connection reset by peer",
+                        SocketError.NetworkUnreachable => "network unreachable",
+                        SocketError.HostUnreachable => "host unreachable",
+                        SocketError.HostNotFound => "host not found",
+                        SocketError.TryAgain => "temporary DNS failure",
+                        SocketError.TimedOut => "timed out",
+                        _ => $"network error ({se.ErrorCode})"
+                    };
+                if (e is System.Security.Authentication.AuthenticationException) return "TLS handshake failed";
+                if (e is System.ComponentModel.Win32Exception w) return $"system error ({w.NativeErrorCode})";
+            }
+            return "unexpected error";
+        }
+
+        private static bool HasCyrillic(string s)
+        {
+            foreach (var c in s)
+                if (c >= 'Ѐ' && c <= 'ӿ') return true;
+            return false;
         }
 
         private async Task RunCheckAsync(bool autoDownload, CancellationToken ct)
@@ -138,13 +181,20 @@ namespace VoidUI.Services
                 else
                     Set(UpdateStage.Available);
             }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                // Cancelled by the user or superseded by a newer check — quiet.
+            }
             catch (OperationCanceledException)
             {
-
+                // HttpClient's own 30s timeout with nobody cancelling: without
+                // this branch the bell sat on "Checking" forever.
+                Error = "timed out";
+                Set(UpdateStage.Failed);
             }
             catch (Exception ex)
             {
-                Error = ex.Message;
+                Error = DescribeError(ex);
                 Set(UpdateStage.Failed);
             }
         }
@@ -156,7 +206,11 @@ namespace VoidUI.Services
         {
             if (string.IsNullOrEmpty(LatestVersion)) return;
 
-            _cts ??= new CancellationTokenSource();
+            // A previous Cancel() leaves a spent CTS behind; a fresh download
+            // must not inherit an already-cancelled token (it would abort
+            // silently before transferring a single byte).
+            if (_cts == null || _cts.IsCancellationRequested)
+                _cts = new CancellationTokenSource();
             var token = _cts.Token;
             _ = Task.Run(async () =>
             {
@@ -168,10 +222,17 @@ namespace VoidUI.Services
 
                     await DownloadAssetAsync(url, $"VoidUI.Setup.{LatestVersion}.exe", token);
                 }
-                catch (OperationCanceledException) { }
+                catch (OperationCanceledException) when (token.IsCancellationRequested) { /* user cancel */ }
+                catch (OperationCanceledException)
+                {
+                    // Timeout mid-download: report it instead of leaving the
+                    // bell stuck on "Downloading…".
+                    Error = "timed out";
+                    Set(UpdateStage.Failed);
+                }
                 catch (Exception ex)
                 {
-                    Error = ex.Message;
+                    Error = DescribeError(ex);
                     Set(UpdateStage.Failed);
                 }
             }, token);
@@ -244,7 +305,7 @@ namespace VoidUI.Services
             }
             catch (Exception ex)
             {
-                Error = ex.Message;
+                Error = DescribeError(ex);
                 Set(UpdateStage.Failed);
                 return false;
             }
